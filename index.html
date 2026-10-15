@@ -411,6 +411,336 @@
       border-color: #a94c2b; background: #ffe8bd;
       box-shadow: 0 3px 0 rgba(91,54,27,.16);
     }
+    :root {
+      color-scheme: dark;
+      --bg: #0b0c0d;
+      --surface: #131516;
+      --surface-raised: #191c1d;
+      --line: #343638;
+      --muted: #999b9a;
+      --text: #f1f0eb;
+      --gold: #bd9a58;
+      --gold-bright: #e6c77f;
+      --green: #7aab89;
+      --red: #cb7869;
+      --mono: "DM Mono", "Courier New", monospace;
+      --sans: "Manrope", Arial, sans-serif;
+    }
+    body {
+      background:
+        radial-gradient(ellipse at 50% -35%, rgba(189,154,88,.11), transparent 55%),
+        linear-gradient(180deg, #101213, #0b0c0d 65%);
+      color: var(--text);
+    }
+    .shell { width: min(1080px, 100%); padding-right: 28px; padding-left: 28px; }
+    .topbar { height: 70px; border-color: rgba(255,255,255,.09); }
+    .brand-mark { border: 1px solid rgba(189,154,88,.55); border-radius: 3px; background: transparent; color: var(--gold-bright); }
+    .brand-name { color: var(--text); letter-spacing: .16em; }
+    .brand-sub, .connection { color: var(--muted); }
+    main { padding-top: 40px; }
+    .eyebrow { color: var(--gold-bright); }
+    h1 { color: var(--text); text-shadow: none; }
+    .intro { color: var(--muted); }
+    .lobby-grid { gap: 16px; margin-top: 28px; }
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: linear-gradient(145deg, rgba(25,28,29,.98), rgba(17,19,20,.98));
+      box-shadow: 0 12px 32px rgba(0,0,0,.16);
+      color: var(--text);
+    }
+    .panel-head { border-color: rgba(255,255,255,.08); }
+    .panel-title, .player-name { color: var(--text); }
+    .panel-note, .rule-text { color: #a5a6a2; }
+    .field-label { color: #d0cec6; }
+    input, select {
+      min-height: 48px;
+      border: 1px solid #454747;
+      border-radius: 4px;
+      background: #101213;
+      color: var(--text);
+    }
+    input:focus, select:focus { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(189,154,88,.13); }
+    .button {
+      min-height: 46px;
+      border: 1px solid #484a49;
+      border-radius: 4px;
+      background: linear-gradient(180deg, #202324, #181a1b);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+      box-shadow: none;
+      transition: transform .16s ease, border-color .16s ease, background .16s ease, box-shadow .16s ease;
+    }
+    .button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      border-color: var(--gold);
+      background: #252523;
+      box-shadow: 0 5px 16px rgba(0,0,0,.22);
+    }
+    .button.primary {
+      border-color: #d4b36d;
+      background: linear-gradient(135deg, #e1c27c, #b9944f);
+      color: #171512;
+      box-shadow: 0 3px 12px rgba(189,154,88,.16);
+    }
+    .button.primary:hover:not(:disabled) { border-color: #f1d996; background: linear-gradient(135deg, #efd693, #c6a55f); }
+    .button:disabled { opacity: .4; box-shadow: none; }
+    .divider, .rule, .setting-line, .player-row { border-color: rgba(255,255,255,.075); }
+    .rule-num { color: var(--gold); }
+    .notice { color: var(--red); }
+    .room-head { margin-top: 26px; }
+    .room-head .eyebrow, .room-link-note { color: var(--muted); }
+    .room-code { color: var(--gold-bright); text-shadow: none; }
+    .avatar {
+      width: 38px; height: 38px;
+      border: 1px solid #686052;
+      border-radius: 4px;
+      background: linear-gradient(145deg, #252625, #171819);
+      color: var(--gold-bright);
+      font: 21px var(--sans);
+    }
+    .player-tag, .opponent-count { color: var(--muted); }
+    .player-state { color: var(--green); }
+    .setting-line { color: var(--muted); }
+    .setting-line strong { color: var(--text); }
+    .game-view { width: 100%; max-width: 1000px; margin: 0 auto; }
+    .game-top {
+      max-width: 920px;
+      align-items: center;
+      margin: 28px auto 18px;
+      padding: 18px 21px;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--gold);
+      border-radius: 4px;
+      background: linear-gradient(100deg, rgba(189,154,88,.09), rgba(19,21,22,.92) 48%);
+      transition: border-color .2s ease, box-shadow .2s ease;
+    }
+    .game-top.is-my-turn {
+      border-left-color: var(--gold-bright);
+      box-shadow: 0 0 28px rgba(189,154,88,.08);
+    }
+    .game-top h2 {
+      margin-top: 6px;
+      color: #d8d7d1;
+      font-size: clamp(22px, 3vw, 30px);
+      letter-spacing: -.04em;
+      text-shadow: none;
+    }
+    .game-top.is-my-turn h2 { color: var(--gold-bright); }
+    .game-meta { gap: 15px; color: var(--muted); }
+    .game-meta strong { color: var(--gold-bright); font-size: 13px; }
+    .table {
+      width: 100%;
+      max-width: 920px;
+      min-height: 230px;
+      margin: 0 auto;
+      padding: 20px 24px;
+      grid-template-columns: minmax(0,1fr) 110px minmax(0,1fr);
+      gap: 14px;
+      overflow: visible;
+      border: 1px solid #66583c;
+      border-radius: 7px;
+      background:
+        radial-gradient(ellipse at center, rgba(189,154,88,.095), transparent 66%),
+        linear-gradient(145deg, #1b1d1d, #121415);
+      box-shadow: inset 0 0 0 5px rgba(189,154,88,.035), 0 12px 35px rgba(0,0,0,.23);
+    }
+    .table::before {
+      inset: 8px;
+      z-index: 0;
+      border: 1px solid rgba(189,154,88,.1);
+      border-radius: 3px;
+    }
+    .table::after { display: none; }
+    .opponents { z-index: 1; gap: 8px; }
+    .opponent {
+      min-height: 66px;
+      padding: 9px 11px;
+      border: 1px solid #3c3e3e;
+      border-radius: 4px;
+      background: linear-gradient(135deg, rgba(35,37,37,.96), rgba(23,25,26,.96));
+      box-shadow: none;
+      transition: border-color .16s ease, transform .16s ease, background .16s ease;
+    }
+    .opponent:hover:not(:disabled) {
+      transform: translateY(-2px);
+      border-color: #786943;
+      background: #242522;
+    }
+    .opponent.selected {
+      border-color: var(--gold-bright);
+      background: linear-gradient(135deg, rgba(189,154,88,.16), rgba(25,27,27,.98));
+      box-shadow: 0 0 0 1px rgba(189,154,88,.18);
+    }
+    .opponent:disabled { opacity: .68; }
+    .opponent-name { color: var(--text); font-size: 11px; }
+    .opponent-count { font-size: 9px; }
+    .opponent-turn { color: var(--gold-bright); font-size: 8px; }
+    .opponent .avatar { width: 40px; height: 40px; border-color: #554d3c; background: #191b1b; font-size: 23px; }
+    .deck { z-index: 1; }
+    .deck-card {
+      width: 66px; height: 91px;
+      border: 1px solid #a68b51;
+      border-radius: 4px;
+      background:
+        repeating-linear-gradient(45deg, transparent 0 7px, rgba(189,154,88,.09) 7px 8px),
+        linear-gradient(145deg, #262724, #161819);
+      color: var(--gold-bright);
+      box-shadow: 3px 4px 0 #0b0c0d, 5px 6px 0 #333128;
+    }
+    .deck-card::after { border: 1px solid rgba(230,199,127,.36); }
+    .deck-card span { font-size: 22px; }
+    .deck-count { color: var(--text); }
+    .deck-label { color: var(--muted); }
+    .table-status { color: #bbb8ae; font-size: 11px; }
+    .hand-section { max-width: 920px; margin: 25px auto 0; }
+    .section-head { margin-bottom: 15px; }
+    .section-title { color: var(--text); font-size: 15px; }
+    .section-hint { color: var(--muted); }
+    .hand { gap: 12px; align-items: flex-start; min-height: 155px; padding: 4px 3px 10px; }
+    .card {
+      width: 86px; height: 126px;
+      padding: 10px;
+      border: 1px solid #9b824b;
+      border-radius: 5px;
+      background:
+        linear-gradient(145deg, rgba(189,154,88,.1), transparent 42%),
+        linear-gradient(160deg, #242624, #151718);
+      color: #f2eee3;
+      box-shadow: inset 0 0 0 3px rgba(189,154,88,.055), 0 7px 18px rgba(0,0,0,.27);
+      transition: transform .17s ease, border-color .17s ease, box-shadow .17s ease;
+    }
+    .card:hover:not(:disabled) {
+      transform: translateY(-7px);
+      border-color: var(--gold-bright);
+      box-shadow: inset 0 0 0 3px rgba(189,154,88,.1), 0 12px 24px rgba(0,0,0,.4);
+    }
+    .card.selected {
+      outline: 2px solid var(--gold-bright);
+      outline-offset: 2px;
+      transform: translateY(-7px);
+      box-shadow: inset 0 0 0 3px rgba(189,154,88,.12), 0 12px 28px rgba(189,154,88,.14);
+    }
+    .card:disabled { opacity: .54; cursor: not-allowed; }
+    .card.red-suit { color: #d78370; }
+    .card-rank { font-size: 20px; font-weight: 700; }
+    .card-suit { font-size: 31px; }
+    .card-corner-bottom { color: var(--gold); font-size: 13px; }
+    .step-label {
+      display: flex; align-items: center; gap: 9px; margin: 0 0 12px;
+      color: #d8d6cf; font-size: 12px; font-weight: 700;
+    }
+    .step-number {
+      display: grid; place-items: center; width: 23px; height: 23px;
+      border: 1px solid #77643f; border-radius: 50%;
+      color: var(--gold-bright); font: 10px var(--mono);
+    }
+    .opponent-step { max-width: 920px; margin: 13px auto 0; }
+    .opponent-step .table-status { margin-top: 10px; text-align: left; }
+    .ask-area {
+      gap: 14px;
+      margin-top: 18px;
+      padding: 16px;
+      border: 1px solid #343637;
+      border-radius: 5px;
+      background: linear-gradient(120deg, #191b1c, #121415);
+    }
+    .ask-copy { flex: 1; min-width: 190px; color: #c5c4bd; font-size: 12px; line-height: 1.6; }
+    .ask-copy strong { color: var(--gold-bright); }
+    #askButton { min-width: 220px; min-height: 52px; font-size: 13px; }
+    #askButton:not(:disabled) { animation: ready-glow 2s ease-in-out infinite alternate; }
+    @keyframes ready-glow {
+      from { box-shadow: 0 3px 10px rgba(189,154,88,.14); }
+      to { box-shadow: 0 4px 20px rgba(189,154,88,.3); }
+    }
+    .action-notice {
+      display: flex; align-items: center; gap: 11px;
+      max-width: 920px; min-height: 44px; margin: 14px auto 0; padding: 10px 14px;
+      border: 1px solid rgba(189,154,88,.3); border-radius: 4px;
+      background: rgba(189,154,88,.055);
+      color: #d5d1c6; font-size: 11px; line-height: 1.5;
+      animation: notice-in .28s ease-out both;
+    }
+    .action-notice::before { content: "↳"; color: var(--gold-bright); font: 16px var(--mono); }
+    @keyframes notice-in {
+      from { opacity: .55; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .feed { max-width: 920px; margin: 17px auto 0; }
+    .feed .panel-head { border-color: rgba(255,255,255,.08); }
+    .feed-list { color: var(--text); }
+    .feed-item { border-color: rgba(255,255,255,.1); border-radius: 3px; color: #b5b4ae; }
+    .feed-item strong, .chest { color: var(--gold-bright); }
+    .chest { border-color: rgba(189,154,88,.35); border-radius: 3px; }
+    .empty-state { color: var(--muted); }
+    .modal-backdrop { background: rgba(0,0,0,.78); backdrop-filter: blur(5px); }
+    .modal {
+      border: 1px solid #78663e;
+      border-radius: 5px;
+      background: linear-gradient(145deg, #1d1f1f, #111314);
+      box-shadow: 0 24px 70px rgba(0,0,0,.5);
+    }
+    .modal h2 { color: var(--text); }
+    .modal p { color: var(--muted); }
+    .score-row { border-color: rgba(255,255,255,.09); color: #dedbd2; }
+    .score-row strong { color: var(--gold-bright); }
+    .footer-note { color: #777a78; }
+    .animal-choice {
+      border: 1px solid #454747;
+      border-radius: 4px;
+      background: #141617;
+      color: #d7d4cb;
+    }
+    .animal-choice:hover, .animal-choice.selected {
+      border-color: var(--gold);
+      background: #24231f;
+      box-shadow: inset 0 0 0 1px rgba(189,154,88,.13);
+    }
+    @media (max-width: 720px) {
+      .shell { padding-right: 17px; padding-left: 17px; }
+      main { padding-top: 28px; }
+      .game-top { margin-top: 20px; padding: 15px; }
+      .table { min-height: 215px; padding: 15px 12px; grid-template-columns: minmax(0,1fr) 74px minmax(0,1fr); border-radius: 5px; }
+      .opponent { min-height: 62px; padding: 7px; }
+      .opponent .avatar { width: 33px; height: 33px; font-size: 19px; }
+      .deck-card { width: 53px; height: 74px; }
+      .game-meta { gap: 10px; }
+      .game-meta span { font-size: 9px; }
+      .hand-section, .opponent-step, .action-notice, .feed { max-width: none; }
+    }
+    @media (max-width: 430px) {
+      .topbar { height: 62px; }
+      .shell { padding-right: 13px; padding-left: 13px; }
+      .brand { gap: 9px; }
+      .brand-mark { width: 29px; height: 29px; }
+      .brand-name { font-size: 10px; }
+      .brand-sub { font-size: 8px; }
+      .connection { font-size: 8px; }
+      .lobby-grid { grid-template-columns: 1fr; }
+      .game-top { align-items: flex-start; gap: 8px; padding: 13px 11px; }
+      .game-top h2 { font-size: 21px; }
+      .game-meta { gap: 5px; font-size: 8px; }
+      .table { grid-template-columns: minmax(0,1fr) 56px minmax(0,1fr); gap: 5px; min-height: 190px; padding: 12px 7px; }
+      .opponent { flex-direction: row; min-height: 54px; gap: 5px; padding: 5px; text-align: left; }
+      .opponent .avatar { width: 27px; height: 27px; font-size: 16px; }
+      .opponent-name { font-size: 9px; }
+      .opponent-count { font-size: 8px; }
+      .deck-card { width: 43px; height: 62px; }
+      .deck-card span { font-size: 17px; }
+      .table-status { font-size: 9px; }
+      .hand { gap: 8px; min-height: 126px; }
+      .card { width: 68px; height: 101px; padding: 8px; }
+      .card-rank { font-size: 17px; }
+      .card-suit { font-size: 25px; }
+      .ask-area { align-items: stretch; padding: 12px; }
+      .ask-copy { min-width: 100%; }
+      #askButton { width: 100%; min-width: 100%; }
+      .lobby-columns { grid-template-columns: 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
   </style>
 </head>
 <body>
@@ -483,6 +813,7 @@
           <div><div class="eyebrow" id="gameRoomLabel">Партия</div><h2 id="turnTitle">Ход игрока</h2></div>
           <div class="game-meta"><span>КОЛОДА <strong id="deckRemaining">0</strong></span><span>СУНДУКИ <strong id="chestTotal">0</strong></span></div>
         </div>
+        <div id="actionNotice" class="action-notice" role="status" aria-live="polite"></div>
         <div class="table">
           <div id="opponentsLeft" class="opponents"></div>
           <div class="deck"><div class="deck-card"><span>♢</span></div><div id="deckCount" class="deck-count">0</div><div class="deck-label">в колоде</div></div>
@@ -490,9 +821,13 @@
           <div id="tableStatus" class="table-status"></div>
         </div>
         <section class="hand-section">
-          <div class="section-head"><h3 class="section-title">Ваша рука <span id="handCount" class="player-tag"></span></h3><span id="handHint" class="section-hint"></span></div>
+          <div class="section-head"><h3 class="section-title"><span class="step-number">01</span> Выберите номинал <span id="handCount" class="player-tag"></span></h3><span id="handHint" class="section-hint"></span></div>
           <div id="hand" class="hand"></div>
-          <div class="ask-area"><span id="askCopy" class="ask-copy">Выберите достоинство и игрока.</span><button id="askButton" class="button primary" disabled>Задать вопрос</button></div>
+        </section>
+        <section class="opponent-step">
+          <h3 class="step-label"><span class="step-number">02</span> Выберите игрока</h3>
+          <div id="targetHint" class="table-status"></div>
+          <div class="ask-area"><span id="askCopy" class="ask-copy">Сначала выберите карту, затем соперника за столом.</span><button id="askButton" class="button primary" disabled>Есть ли у тебя…?</button></div>
         </section>
         <section class="panel feed"><div class="panel-head"><h3 class="panel-title">Сундучки</h3></div><div id="chestList" class="feed-list"></div></section>
         <section class="panel feed"><div class="panel-head"><h3 class="panel-title">За столом</h3></div><div id="activity" class="feed-list"></div></section>
@@ -885,19 +1220,23 @@
         const players = app.state.players;
         const active = app.state.turnIndex >= 0 ? players[app.state.turnIndex] : null;
         const myTurn = active && active.id === app.playerId && !app.state.finished;
+        if (app.selectedRank && !app.hand.some((card) => card.rank === app.selectedRank)) app.selectedRank = null;
+        if (app.selectedTarget && !players.some((player) => player.id === app.selectedTarget)) app.selectedTarget = null;
         $("gameRoomLabel").textContent = "Комната " + app.roomId;
         $("turnTitle").textContent = app.state.finished ? "Партия завершена" : (myTurn ? "Ваш ход" : "Ход: " + (active ? active.name : "—"));
+        document.querySelector("#gameView .game-top").classList.toggle("is-my-turn", Boolean(myTurn));
         $("deckRemaining").textContent = String(app.state.deck.length);
         $("deckCount").textContent = String(app.state.deck.length);
         $("chestTotal").textContent = String(players.reduce((total, player) => total + player.chests.length, 0));
         $("handCount").textContent = "(" + app.hand.length + ")";
-        $("tableStatus").textContent = app.state.finished ? "Колода закончилась · партия завершена" : (myTurn ? "Выберите карту и соперника, которого хотите спросить." : "Ожидайте своего хода.");
-        $("handHint").textContent = myTurn ? "Выберите достоинство" : "";
+        $("tableStatus").textContent = app.state.finished ? "Колода закончилась · партия завершена" : (myTurn ? "Ваш ход — выберите номинал карты и соперника ниже." : "Ожидайте своего хода.");
+        $("handHint").textContent = myTurn ? "Нажмите на карту" : "";
+        $("actionNotice").textContent = app.state.activity[0] || "Партия началась.";
         const otherPlayers = players.filter((player) => player.id !== app.playerId);
         const canAsk = myTurn && app.hand.length > 0;
         const allowed = (player) => app.config.rule !== "left" || players[(players.findIndex((item) => item.id === app.playerId) + 1) % players.length]?.id === player.id;
         const buttons = otherPlayers.map((player) =>
-          '<button class="opponent ' + (app.selectedTarget === player.id ? "selected" : "") + '" data-player="' + escapeHtml(player.id) + '"' + (!canAsk || !allowed(player) ? " disabled" : "") + '>' +
+          '<button type="button" class="opponent ' + (app.selectedTarget === player.id ? "selected" : "") + '" data-player="' + escapeHtml(player.id) + '" aria-pressed="' + (app.selectedTarget === player.id) + '" aria-label="Выбрать игрока ' + escapeHtml(player.name) + '"' + (!canAsk || !allowed(player) ? " disabled" : "") + '>' +
           '<div class="avatar" aria-hidden="true">' + validAnimal(player.animal) + '</div><div class="opponent-info"><div class="opponent-name">' + escapeHtml(player.name) + '</div><div class="opponent-count">' + (player.cardCount ?? (player.hand ? player.hand.length : 0)) + ' карт · ' + player.chests.length + ' сундуков</div></div>' +
           (active && active.id === player.id ? '<span class="opponent-turn">ХОД</span>' : "") + '</button>'
         );
@@ -912,7 +1251,7 @@
         const suitsSymbols = { "♠": "♠", "♥": "♥", "♦": "♦", "♣": "♣" };
         $("hand").innerHTML = sortHand(app.hand).map((card) => {
           const red = card.suit === "♥" || card.suit === "♦";
-          return '<button class="card ' + (red ? "red-suit " : "") + (app.selectedRank === card.rank ? "selected" : "") + '" data-rank="' + escapeHtml(card.rank) + '"' + (!myTurn ? " disabled" : "") + ' aria-label="' + escapeHtml(card.rank + " " + card.suit) + '">' +
+          return '<button type="button" class="card ' + (red ? "red-suit " : "") + (app.selectedRank === card.rank ? "selected" : "") + '" data-rank="' + escapeHtml(card.rank) + '" aria-pressed="' + (app.selectedRank === card.rank) + '"' + (!myTurn ? " disabled" : "") + ' aria-label="Выбрать номинал ' + escapeHtml(card.rank + ", " + card.suit) + '">' +
             '<span class="card-rank">' + escapeHtml(card.rank) + '</span><span class="card-suit">' + suitsSymbols[card.suit] + '</span><span class="card-corner-bottom">' + escapeHtml(card.rank) + '</span></button>';
         }).join("");
         document.querySelectorAll(".card[data-rank]").forEach((button) => {
@@ -924,14 +1263,29 @@
         const target = app.selectedTarget ? playerById(app.selectedTarget) : null;
         const rankHeld = app.hand.some((card) => card.rank === app.selectedRank);
         $("askButton").disabled = !canAsk || !rankHeld || !target || !allowed(target);
-        $("askCopy").innerHTML = app.selectedRank && target
-          ? 'Спросить у <strong>' + escapeHtml(target.name) + '</strong>: «Есть ли у тебя <strong>' + escapeHtml(rankLabel(app.selectedRank)) + '</strong>?»'
-          : "Выберите достоинство и игрока.";
+        $("targetHint").textContent = !myTurn
+          ? "Соперники отображаются на игровом столе выше."
+          : (app.config.rule === "left" ? "По правилу комнаты выбирайте только игрока слева." : "Нажмите на карточку соперника за столом выше.");
+        if (app.selectedRank && target) {
+          $("askCopy").innerHTML = 'Ваш вопрос: «Есть ли у <strong>' + escapeHtml(target.name) + '</strong> <strong>' + escapeHtml(rankLabel(app.selectedRank)) + '</strong>?»';
+          $("askButton").textContent = "Есть ли у тебя " + rankLabel(app.selectedRank) + "?";
+        } else if (app.selectedRank) {
+          $("askCopy").innerHTML = "Номинал выбран: <strong>" + escapeHtml(rankLabel(app.selectedRank)) + "</strong>. Теперь нажмите на игрока за столом.";
+          $("askButton").textContent = "Выберите игрока";
+        } else if (target) {
+          $("askCopy").innerHTML = "Игрок выбран: <strong>" + escapeHtml(target.name) + "</strong>. Теперь выберите номинал на своей карте.";
+          $("askButton").textContent = "Выберите номинал";
+        } else {
+          $("askCopy").textContent = myTurn ? "Выберите номинал на карте и игрока за столом." : "Когда придёт ваш ход, сначала выберите карту, затем игрока.";
+          $("askButton").textContent = "Есть ли у тебя…?";
+        }
         $("askButton").onclick = () => {
           if (!$("askButton").disabled) {
-            sendToHost({ type: "ask", targetId: app.selectedTarget, rank: app.selectedRank });
+            const question = { type: "ask", targetId: app.selectedTarget, rank: app.selectedRank };
             app.selectedRank = null;
             app.selectedTarget = null;
+            sendToHost(question);
+            renderGame();
           }
         };
         $("chestList").innerHTML = players.map((player) => player.chests.map((rank) =>
