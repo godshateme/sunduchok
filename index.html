@@ -1,253 +1,1724 @@
-(() => {
-  const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
-  const suits = [
-    { code: 's', mark: '♠', red: false },
-    { code: 'h', mark: '♥', red: true },
-    { code: 'd', mark: '♦', red: true },
-    { code: 'c', mark: '♣', red: false }
-  ];
-  const seatPositions = ['player', 'top', 'left', 'right'];
-  const names = ['ВЫ', 'АРХИВАРИУС', 'ИНВЕСТОР', 'ПАРТНЁР'];
-  const elements = Object.fromEntries([
-    'bankroll', 'hands-played', 'hands-won', 'current-stake', 'hand-count', 'pot',
-    'community-cards', 'street-label', 'game-message', 'call-button', 'fold-button',
-    'raise-button', 'raise-value', 'raise-down', 'raise-up', 'new-game'
-  ].map((id) => [id, document.getElementById(id)]));
-  const players = names.map((name, index) => ({ name, index, stack: 500, hole: [], folded: false, roundBet: 0 }));
-  let deck = [];
-  let board = [];
-  let pot = 0;
-  let currentBet = 0;
-  let raiseAmount = 20;
-  let handNumber = 0;
-  let wins = 0;
-  let streetIndex = 0;
-  let handOver = false;
-  let userTurn = false;
-  let lastDealer = -1;
-  const streets = ['ПРЕФЛОП', 'ФЛОП', 'ТЁРН', 'РИВЕР'];
-  const libraryAvailable = typeof window.Hand !== 'undefined';
-
-  function shuffle(cards) {
-    for (let index = cards.length - 1; index > 0; index -= 1) {
-      const swapIndex = Math.floor(Math.random() * (index + 1));
-      [cards[index], cards[swapIndex]] = [cards[swapIndex], cards[index]];
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111111">
+  <title>Сундучок — карточная игра</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #111211;
+      --surface: #191a18;
+      --surface-raised: #20211e;
+      --line: #34342e;
+      --muted: #929188;
+      --text: #f0eee7;
+      --gold: #c5a667;
+      --gold-bright: #e1c383;
+      --green: #79937d;
+      --red: #b97868;
+      --mono: "DM Mono", "Courier New", monospace;
+      --sans: "Manrope", Arial, sans-serif;
     }
-    return cards;
-  }
-
-  function cardMarkup(card, faceDown = false) {
-    if (faceDown) return '<div class="playing-card back" aria-label="Карта рубашкой вверх"></div>';
-    const suit = suits.find((item) => item.code === card.suit);
-    const rank = card.rank === 'T' ? '10' : card.rank;
-    return `<div class="playing-card${suit.red ? ' red' : ''}" aria-label="${rank}${suit.mark}"><span class="rank">${rank}</span><span class="suit">${suit.mark}</span><span class="center-suit">${suit.mark}</span></div>`;
-  }
-
-  function renderSeat(player) {
-    const seat = document.getElementById(`seat-${player.index}`);
-    const reveal = player.index === 0 || (handOver && !player.folded);
-    const cards = player.hole.map((card) => cardMarkup(card, !reveal)).join('');
-    seat.className = `seat seat-${seatPositions[player.index]}${player.folded ? ' seat-folded' : ''}`;
-    seat.innerHTML = `<div class="player-meta">${player.index === lastDealer ? '<span class="dealer-chip">D</span>' : ''}<span class="player-name">${player.name}</span><span class="player-stack">${player.stack}</span></div><div class="seat-cards">${cards}</div>`;
-  }
-
-  function render() {
-    players.forEach(renderSeat);
-    elements['community-cards'].innerHTML = board.map((card) => cardMarkup(card)).join('');
-    elements.pot.textContent = pot;
-    elements['street-label'].textContent = handOver ? 'ШОУДАУН' : streets[streetIndex];
-    elements.bankroll.textContent = players[0].stack;
-    elements['hands-played'].textContent = Math.max(1, handNumber);
-    elements['hands-won'].textContent = wins;
-    elements['current-stake'].textContent = currentBet || 20;
-    elements['hand-count'].textContent = `РАЗДАЧА ${String(Math.max(1, handNumber)).padStart(2, '0')}`;
-    elements['raise-value'].textContent = raiseAmount;
-    const callAmount = Math.max(0, currentBet - players[0].roundBet);
-    elements['call-button'].innerHTML = handOver
-      ? '<span>↻</span> СЛЕДУЮЩАЯ РАЗДАЧА'
-      : callAmount ? `<span>✓</span> КОЛЛ ${callAmount}` : '<span>✓</span> ЧЕК';
-    const active = userTurn && !handOver;
-    elements['call-button'].disabled = !active && !handOver;
-    elements['fold-button'].disabled = !active;
-    elements['raise-button'].disabled = !active || players[0].stack <= callAmount;
-    elements['raise-down'].disabled = !active || raiseAmount <= 20;
-    elements['raise-up'].disabled = !active;
-  }
-
-  function message(text) {
-    elements['game-message'].textContent = text;
-  }
-
-  function pay(player, amount) {
-    const paid = Math.min(Math.max(amount, 0), player.stack);
-    player.stack -= paid;
-    player.roundBet += paid;
-    pot += paid;
-  }
-
-  function nextActive(index) {
-    for (let offset = 1; offset <= players.length; offset += 1) {
-      const candidate = players[(index + offset) % players.length];
-      if (candidate.stack > 0) return candidate.index;
+    * { box-sizing: border-box; }
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      background:
+        radial-gradient(ellipse at 50% -25%, rgba(197, 166, 103, .08), transparent 57%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
     }
-    return (index + 1) % players.length;
-  }
-
-  function startHand() {
-    if (!libraryAvailable) {
-      message('Покерная библиотека не загрузилась. Проверьте интернет и обновите страницу.');
-      return;
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+    .shell { width: min(1120px, 100%); margin: 0 auto; padding: 0 28px 56px; }
+    .topbar {
+      height: 78px; display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid rgba(255,255,255,.08);
     }
-    if (players[0].stack === 0 || players.slice(1).every((player) => player.stack === 0)) resetSession();
-    handNumber += 1;
-    const deckCards = ranks.flatMap((rank) => suits.map((suit) => ({ rank, suit: suit.code })));
-    deck = shuffle(deckCards);
-    board = [];
-    pot = 0;
-    currentBet = 0;
-    streetIndex = 0;
-    handOver = false;
-    players.forEach((player) => {
-      player.hole = [];
-      player.folded = player.stack === 0;
-      player.roundBet = 0;
-    });
-    players.filter((player) => !player.folded).forEach((player) => { player.hole = [deck.pop(), deck.pop()]; });
-    lastDealer = nextActive(lastDealer);
-    const smallBlind = nextActive(lastDealer);
-    const bigBlind = nextActive(smallBlind);
-    pay(players[smallBlind], 10);
-    pay(players[bigBlind], 20);
-    currentBet = Math.max(...players.map((player) => player.roundBet));
-    userTurn = true;
-    raiseAmount = 20;
-    message('Ваш ход. Колл, рейз или сброс.');
-    render();
-  }
-
-  function handStrength(player) {
-    if (board.length < 3) {
-      const values = player.hole.map((card) => ranks.indexOf(card.rank)).sort((a, b) => b - a);
-      const pairBonus = values[0] === values[1] ? .28 : 0;
-      const suitedBonus = player.hole[0].suit === player.hole[1].suit ? .06 : 0;
-      return Math.min(.92, .18 + values[0] / 35 + values[1] / 70 + pairBonus + suitedBonus);
+    .brand { display: flex; align-items: center; gap: 13px; }
+    .brand-mark {
+      display: grid; place-items: center; width: 34px; height: 34px;
+      border: 1px solid rgba(197,166,103,.55); color: var(--gold);
+      font: 15px var(--mono); transform: rotate(45deg);
     }
-    const hand = window.Hand.solve([...player.hole, ...board].map((card) => `${card.rank}${card.suit}`), 'standard');
-    return Math.max(.08, Math.min(.96, (hand.rank - 1) / 9 + .14));
-  }
-
-  function runBots() {
-    players.slice(1).forEach((player) => {
-      if (player.folded || player.stack === 0) return;
-      const due = Math.max(0, currentBet - player.roundBet);
-      const strength = handStrength(player);
-      const pressure = due / Math.max(1, pot + due);
-      const foldChance = due === 0 ? 0 : Math.max(.03, Math.min(.74, .12 + pressure * .48 - strength * .45));
-      if (due > 0 && Math.random() < foldChance) player.folded = true;
-      else pay(player, due);
-    });
-  }
-
-  function finish(text) {
-    handOver = true;
-    userTurn = false;
-    message(text);
-    render();
-  }
-
-  function settleByFold() {
-    const active = players.filter((player) => !player.folded);
-    if (active.length !== 1) return false;
-    active[0].stack += pot;
-    if (active[0].index === 0) wins += 1;
-    pot = 0;
-    finish(`${active[0].name} забирает банк без вскрытия.`);
-    return true;
-  }
-
-  function showDown() {
-    const active = players.filter((player) => !player.folded);
-    const hands = active.map((player) => window.Hand.solve([...player.hole, ...board].map((card) => `${card.rank}${card.suit}`), 'standard'));
-    const winners = window.Hand.winners(hands);
-    const winnerPlayers = active.filter((player, index) => winners.includes(hands[index]));
-    const share = Math.floor(pot / winnerPlayers.length);
-    let remainder = pot - share * winnerPlayers.length;
-    winnerPlayers.forEach((player) => {
-      player.stack += share + (remainder > 0 ? 1 : 0);
-      remainder = Math.max(0, remainder - 1);
-    });
-    if (winnerPlayers.some((player) => player.index === 0)) wins += 1;
-    const winnerNames = winnerPlayers.map((player) => player.name).join(' / ');
-    const handName = winners[0]?.descr || 'лучшая комбинация';
-    pot = 0;
-    finish(`${winnerNames} забирает банк · ${handName}`);
-  }
-
-  function advanceStreet() {
-    if (settleByFold()) return;
-    if (players[0].stack === 0 || streetIndex >= 3) {
-      board = [...board, ...deck.splice(0, 5 - board.length)];
-      streetIndex = 3;
-      showDown();
-      return;
+    .brand-mark span { transform: rotate(-45deg); }
+    .brand-name { font-size: 12px; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; }
+    .brand-sub { margin-top: 3px; color: var(--muted); font: 9px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+    .connection { display: flex; align-items: center; gap: 8px; color: var(--muted); font: 10px var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+    .connection-dot { width: 7px; height: 7px; border-radius: 50%; background: #69695f; }
+    .connection.online .connection-dot { background: var(--green); box-shadow: 0 0 10px rgba(121,147,125,.6); }
+    .connection.offline .connection-dot { background: var(--red); }
+    main { padding-top: 46px; }
+    .eyebrow { color: var(--gold); font: 10px var(--mono); letter-spacing: .18em; text-transform: uppercase; }
+    h1 { margin: 12px 0 7px; font-size: clamp(30px, 5vw, 48px); line-height: 1.08; letter-spacing: -.055em; }
+    .intro { max-width: 510px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.8; }
+    .view { display: none; }
+    .view.active { display: block; }
+    .lobby-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr); gap: 18px; margin-top: 34px; }
+    .panel { border: 1px solid var(--line); background: rgba(25,26,24,.88); }
+    .panel-head { padding: 21px 23px 17px; border-bottom: 1px solid var(--line); }
+    .panel-title { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .01em; }
+    .panel-note { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+    .panel-body { padding: 22px 23px 24px; }
+    .field { display: grid; gap: 8px; margin-bottom: 17px; }
+    .field-label { color: #c1beb3; font-size: 11px; font-weight: 600; }
+    input, select {
+      width: 100%; min-height: 43px; padding: 0 13px;
+      border: 1px solid var(--line); border-radius: 0; outline: none;
+      background: #121311; color: var(--text); font-size: 12px;
     }
-    streetIndex += 1;
-    if (streetIndex === 1) {
-      deck.pop();
-      board.push(deck.pop(), deck.pop(), deck.pop());
-    } else {
-      deck.pop();
-      board.push(deck.pop());
+    input:focus, select:focus { border-color: var(--gold); }
+    select { cursor: pointer; }
+    .setting-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .button {
+      display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+      min-height: 43px; padding: 0 16px; border: 1px solid var(--line);
+      background: transparent; color: var(--text); cursor: pointer;
+      font-size: 11px; font-weight: 700; transition: border-color .15s, background .15s, color .15s;
     }
-    players.forEach((player) => { player.roundBet = 0; });
-    currentBet = 0;
-    userTurn = true;
-    message(`${streets[streetIndex]} · ваш ход.`);
-    render();
-  }
-
-  function takeAction(action) {
-    if (!userTurn || handOver) return;
-    userTurn = false;
-    const user = players[0];
-    if (action === 'fold') {
-      user.folded = true;
-      board = [...board, ...deck.splice(0, 5 - board.length)];
-      streetIndex = 3;
-      runBots();
-      if (!settleByFold()) showDown();
-      return;
+    .button:hover:not(:disabled) { border-color: var(--gold); }
+    .button:disabled { opacity: .45; cursor: not-allowed; }
+    .button.primary { border-color: var(--gold); background: var(--gold); color: #171612; }
+    .button.primary:hover:not(:disabled) { background: var(--gold-bright); border-color: var(--gold-bright); }
+    .button.full { width: 100%; }
+    .button.small { min-height: 34px; padding: 0 11px; font-size: 10px; }
+    .divider { height: 1px; margin: 20px 0; background: var(--line); }
+    .join-row { display: flex; gap: 9px; }
+    .join-row input { min-width: 0; }
+    .rules { padding: 2px 22px 18px; }
+    .rule { display: flex; gap: 12px; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,.055); }
+    .rule:last-child { border-bottom: 0; }
+    .rule-num { min-width: 24px; color: var(--gold); font: 10px var(--mono); }
+    .rule-text { color: #b9b7ae; font-size: 11px; line-height: 1.65; }
+    .notice { min-height: 18px; margin-top: 12px; color: var(--red); font-size: 11px; line-height: 1.5; }
+    .room-head {
+      display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 15px;
+      margin: 31px 0 17px;
     }
-    if (action === 'raise') {
-      const target = currentBet + raiseAmount;
-      pay(user, target - user.roundBet);
-      currentBet = user.roundBet;
-      message('Ставка принята. Соперники решают.');
-    } else {
-      pay(user, currentBet - user.roundBet);
-      message('Ставки уравнены. Соперники отвечают.');
+    .room-code-wrap { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+    .room-code { color: var(--gold-bright); font: 17px var(--mono); letter-spacing: .13em; }
+    .room-link-note { color: var(--muted); font-size: 10px; }
+    .lobby-columns { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; }
+    .player-list { padding: 6px 21px; }
+    .player-row { display: flex; align-items: center; gap: 12px; min-height: 54px; border-bottom: 1px solid rgba(255,255,255,.06); }
+    .player-row:last-child { border-bottom: 0; }
+    .avatar {
+      display: grid; place-items: center; width: 30px; height: 30px;
+      border: 1px solid #47463e; color: var(--gold); font: 10px var(--mono);
     }
-    runBots();
-    render();
-    window.setTimeout(advanceStreet, 650);
-  }
+    .player-name { flex: 1; font-size: 12px; font-weight: 600; }
+    .player-tag { color: var(--muted); font: 9px var(--mono); text-transform: uppercase; }
+    .player-state { color: var(--green); font: 9px var(--mono); text-transform: uppercase; }
+    .room-settings { padding: 18px 20px; }
+    .setting-line { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.06); color: var(--muted); font-size: 10px; }
+    .setting-line:last-of-type { border-bottom: 0; margin-bottom: 17px; }
+    .setting-line strong { color: var(--text); font-weight: 600; text-align: right; }
+    .game-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin: 31px 0 20px; }
+    .game-top h2 { margin: 7px 0 0; font-size: 22px; letter-spacing: -.04em; }
+    .game-meta { display: flex; gap: 18px; color: var(--muted); font: 10px var(--mono); }
+    .game-meta strong { color: var(--gold); font-weight: 500; }
+    .table {
+      position: relative; display: grid; grid-template-columns: 1fr minmax(210px, .8fr) 1fr;
+      align-items: center; gap: 16px; min-height: 225px; padding: 25px;
+      border: 1px solid #3a3932; background:
+        radial-gradient(ellipse, rgba(197,166,103,.065), transparent 67%),
+        linear-gradient(145deg, #1c1d1a, #161715);
+    }
+    .table::before { content: ""; position: absolute; inset: 8px; border: 1px solid rgba(197,166,103,.08); pointer-events: none; }
+    .opponents { display: grid; gap: 9px; align-content: center; }
+    .opponent {
+      display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 7px 10px;
+      border: 1px solid transparent; background: rgba(255,255,255,.025); text-align: left; cursor: pointer;
+    }
+    .opponent:hover:not(:disabled), .opponent.selected { border-color: rgba(197,166,103,.6); background: rgba(197,166,103,.08); }
+    .opponent:disabled { opacity: .48; cursor: default; }
+    .opponent-info { flex: 1; min-width: 0; }
+    .opponent-name { overflow: hidden; color: #e2e0d8; font-size: 10px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+    .opponent-count { margin-top: 4px; color: var(--muted); font: 9px var(--mono); }
+    .opponent-turn { color: var(--gold); font: 9px var(--mono); }
+    .deck { display: grid; justify-items: center; text-align: center; }
+    .deck-card {
+      position: relative; display: grid; place-items: center; width: 72px; height: 100px;
+      border: 1px solid #756746; background: #23231f; color: var(--gold);
+      box-shadow: 4px 5px 0 #111, 7px 8px 0 #34332b;
+    }
+    .deck-card::after { content: ""; position: absolute; inset: 5px; border: 1px solid rgba(197,166,103,.3); }
+    .deck-card span { font: 24px var(--mono); }
+    .deck-count { margin-top: 17px; font: 11px var(--mono); color: var(--text); }
+    .deck-label { margin-top: 4px; color: var(--muted); font: 8px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+    .table-status { grid-column: 1 / -1; position: relative; z-index: 1; color: var(--muted); font-size: 10px; text-align: center; }
+    .hand-section { margin-top: 25px; }
+    .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
+    .section-title { margin: 0; font-size: 12px; font-weight: 700; }
+    .section-hint { color: var(--muted); font-size: 10px; }
+    .hand { display: flex; flex-wrap: wrap; gap: 9px; }
+    .card {
+      position: relative; display: grid; align-content: space-between; width: 70px; height: 99px;
+      padding: 8px; border: 1px solid #55534b; background: #e8e5db; color: #171714;
+      cursor: pointer; text-align: left; transition: transform .15s, border-color .15s;
+    }
+    .card:hover { transform: translateY(-4px); }
+    .card.selected { outline: 2px solid var(--gold); outline-offset: 2px; transform: translateY(-4px); }
+    .card.red-suit { color: #963d36; }
+    .card-rank { font: 15px var(--mono); line-height: 1; }
+    .card-suit { align-self: center; justify-self: center; font-size: 23px; line-height: 1; }
+    .card-corner-bottom { justify-self: end; align-self: end; transform: rotate(180deg); font: 10px var(--mono); line-height: 1; }
+    .ask-area { display: flex; flex-wrap: wrap; align-items: center; gap: 11px; margin-top: 18px; }
+    .ask-copy { color: var(--muted); font-size: 11px; }
+    .ask-copy strong { color: var(--gold-bright); font-weight: 600; }
+    .feed { margin-top: 23px; }
+    .feed-list { display: flex; flex-wrap: wrap; gap: 7px; padding: 15px 18px; }
+    .feed-item { padding: 7px 9px; border: 1px solid rgba(255,255,255,.07); color: #aaa89f; font-size: 10px; }
+    .feed-item strong { color: #e4d5b4; font-weight: 600; }
+    .empty-state { padding: 22px 0; color: var(--muted); font-size: 11px; }
+    .chest-list { display: flex; flex-wrap: wrap; gap: 7px; }
+    .chest { padding: 6px 9px; border: 1px solid rgba(197,166,103,.3); color: var(--gold); font: 10px var(--mono); }
+    .modal-backdrop { position: fixed; z-index: 10; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(0,0,0,.76); }
+    .modal { width: min(420px, 100%); padding: 29px; border: 1px solid var(--line); background: #1a1b18; }
+    .modal h2 { margin: 0 0 10px; font-size: 24px; }
+    .modal p { color: var(--muted); font-size: 12px; line-height: 1.7; }
+    .score-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+    .score-row strong { color: var(--gold); font: 12px var(--mono); }
+    .footer-note { margin-top: 34px; color: #68675f; font: 9px var(--mono); text-align: center; letter-spacing: .04em; }
+    @media (max-width: 720px) {
+      .shell { padding-right: 17px; padding-left: 17px; }
+      .topbar { height: 66px; }
+      main { padding-top: 32px; }
+      .lobby-grid, .lobby-columns { grid-template-columns: 1fr; }
+      .rules { padding-top: 3px; }
+      .room-head { margin-top: 25px; }
+      .table { grid-template-columns: 1fr 100px 1fr; gap: 8px; min-height: 190px; padding: 17px 12px; }
+      .deck-card { width: 59px; height: 82px; }
+      .deck-card span { font-size: 19px; }
+      .opponent { gap: 6px; padding: 6px; }
+      .avatar { width: 26px; height: 26px; }
+      .opponent-name { font-size: 9px; }
+      .game-meta { gap: 10px; }
+    }
+    @media (max-width: 430px) {
+      .setting-row { grid-template-columns: 1fr 1fr; gap: 8px; }
+      .panel-head { padding-right: 17px; padding-left: 17px; }
+      .panel-body { padding-right: 17px; padding-left: 17px; }
+      .table { grid-template-columns: 1fr 75px 1fr; padding-right: 8px; padding-left: 8px; }
+      .deck-card { width: 52px; height: 75px; }
+      .card { width: 61px; height: 88px; }
+      .game-top { align-items: center; }
+      .game-meta { display: grid; gap: 5px; text-align: right; }
+    }
+    :root {
+      color-scheme: light;
+      --bg: #075478;
+      --surface: #fff4d9;
+      --surface-raised: #ffe8bd;
+      --line: #b87645;
+      --muted: #755d48;
+      --text: #29251f;
+      --gold: #a94c2b;
+      --gold-bright: #d66b36;
+      --green: #527a4a;
+      --red: #aa4138;
+    }
+    body {
+      background-color: #075478;
+      background-image:
+        radial-gradient(circle at 15px 15px, rgba(0,40,69,.24) 0 14px, transparent 15px),
+        radial-gradient(circle at 42px 42px, rgba(0,40,69,.16) 0 6px, transparent 7px);
+      background-size: 54px 54px;
+      color: var(--text);
+    }
+    .topbar { border-bottom: 3px solid #093d58; }
+    .brand-mark { border: 2px solid #f2bd69; color: #ffcf7f; }
+    .brand-name { color: #fff1d2; }
+    .brand-sub { color: #c5e0e6; }
+    .connection { color: #e1edf0; }
+    main { padding-top: 34px; }
+    .eyebrow { color: #ffe09b; text-shadow: 0 1px 2px #123d4b; }
+    h1 { color: #fff5da; text-shadow: 0 3px 0 rgba(3,42,61,.3); }
+    .intro { color: #d3e9eb; }
+    .panel {
+      border: 2px solid #173f50;
+      border-radius: 13px;
+      background: #fff4d9;
+      box-shadow: 0 5px 0 rgba(5,42,58,.27);
+      color: #29251f;
+    }
+    .panel-head { border-color: rgba(125,78,42,.2); }
+    .panel-title { color: #3b3024; }
+    .panel-note, .rule-text { color: #75634e; }
+    .field-label { color: #574432; }
+    input, select {
+      border: 2px solid #c39b68;
+      border-radius: 8px;
+      background: #fffdf6;
+      color: #29251f;
+    }
+    input:focus, select:focus { border-color: #a94c2b; }
+    .button {
+      border: 2px solid #a87547;
+      border-radius: 9px;
+      color: #382c20;
+      font-weight: 800;
+      box-shadow: 0 3px 0 rgba(91,54,27,.16);
+    }
+    .button:hover:not(:disabled) { border-color: #873e26; background: #fff0d1; }
+    .button.primary {
+      border-color: #9d4529;
+      background: #c85b32;
+      color: #fff6e3;
+      box-shadow: 0 4px 0 #82371f;
+    }
+    .button.primary:hover:not(:disabled) { border-color: #81341f; background: #dc6c3d; }
+    .rule { border-color: rgba(125,78,42,.15); }
+    .rule-num { color: #b35631; }
+    .divider { background: rgba(125,78,42,.2); }
+    .notice { color: #a43e31; }
+    .room-code { color: #ffe09b; text-shadow: 0 1px 2px #123d4b; }
+    .room-link-note, .room-head .eyebrow { color: #d3e9eb; }
+    .avatar {
+      width: 40px; height: 40px;
+      border: 2px solid #b97945;
+      border-radius: 50%;
+      background: #fff0cf;
+      color: #302417;
+      font: 23px var(--sans);
+    }
+    .player-row { border-color: rgba(125,78,42,.16); }
+    .player-name { color: #342a20; }
+    .player-tag { color: #76654e; }
+    .player-state { color: #527a4a; }
+    .setting-line { border-color: rgba(125,78,42,.16); color: #75634e; }
+    .setting-line strong { color: #382d21; }
+    .game-top h2 { color: #fff4d9; text-shadow: 0 2px 2px rgba(0,0,0,.2); }
+    .game-meta { color: #d3e9eb; }
+    .game-meta strong { color: #ffe09b; }
+    .table {
+      isolation: isolate;
+      overflow: hidden;
+      min-height: 350px;
+      border: 5px solid #8a4529;
+      border-radius: 46% / 20%;
+      background:
+        radial-gradient(ellipse at 50% 47%, #f2bd7d 0 38%, #dfa266 39% 55%, #bf784a 56% 63%, transparent 64%),
+        linear-gradient(#073d56 0 29%, #a64a2c 30% 36%, #102f3b 37% 40%, #086184 41% 100%);
+      box-shadow: inset 0 0 0 6px #f0c27f, inset 0 0 0 10px #87432c, 0 7px 0 rgba(5,42,58,.34);
+    }
+    .table::before {
+      z-index: -1;
+      inset: 13px;
+      border: 3px solid rgba(255,242,205,.43);
+      border-radius: 45% / 24%;
+      pointer-events: none;
+    }
+    .table::after {
+      position: absolute;
+      z-index: -2;
+      top: -22px; left: 12%; right: 12%; height: 112px;
+      border: 5px solid #142c32;
+      border-radius: 0 0 50% 50%;
+      background:
+        radial-gradient(circle at 25% 35%, #df6143 0 22%, transparent 23%),
+        radial-gradient(circle at 75% 35%, #df6143 0 22%, transparent 23%),
+        linear-gradient(#8c302b, #a64030);
+      content: "";
+    }
+    .opponents { z-index: 1; }
+    .opponent {
+      min-height: 83px;
+      border: 2px solid rgba(122,74,39,.35);
+      border-radius: 12px;
+      background: rgba(255,247,225,.91);
+      box-shadow: 0 3px 0 rgba(87,52,28,.2);
+    }
+    .opponent:hover:not(:disabled), .opponent.selected {
+      border-color: #9b4d2d;
+      background: #fff2d5;
+    }
+    .opponent:disabled { opacity: .78; }
+    .opponent-name { color: #362a20; font-size: 11px; }
+    .opponent-count { color: #75634e; }
+    .opponent-turn { color: #aa4c2e; }
+    .opponent .avatar { width: 49px; height: 49px; font-size: 30px; }
+    .deck { z-index: 1; }
+    .deck-card {
+      border: 3px solid #523d2b;
+      border-radius: 5px;
+      background:
+        repeating-linear-gradient(45deg, transparent 0 5px, rgba(255,255,255,.12) 5px 7px),
+        #277d91;
+      color: #fff0c5;
+      box-shadow: 4px 5px 0 #452f22, 7px 8px 0 #261e19;
+    }
+    .deck-card::after { border: 2px solid rgba(255,241,199,.68); }
+    .deck-count { color: #392719; font-weight: 800; }
+    .deck-label { color: #69452d; }
+    .table-status { color: #573b28; font-weight: 800; text-shadow: 0 1px rgba(255,246,224,.55); }
+    .section-title { color: #fff4d9; }
+    .section-hint { color: #d3e9eb; }
+    .hand { align-items: flex-end; }
+    .card {
+      width: 76px; height: 108px;
+      border: 2px solid #453a2c;
+      border-radius: 7px;
+      background: #fffaf0;
+      box-shadow: 0 4px 0 rgba(4,37,51,.28);
+    }
+    .card.selected { outline-color: #ffe09b; }
+    .ask-copy { color: #e4eeee; }
+    .ask-copy strong { color: #ffe09b; }
+    .feed .panel-head { border-color: rgba(125,78,42,.2); }
+    .feed-list { color: #55412d; }
+    .feed-item { border: 1px solid rgba(125,78,42,.23); border-radius: 7px; color: #68543d; }
+    .feed-item strong { color: #9b482c; }
+    .chest { border-color: #b97945; border-radius: 7px; color: #a34c2c; }
+    .empty-state { color: #75634e; }
+    .modal-backdrop { background: rgba(3,35,48,.76); }
+    .modal { border: 3px solid #8a4529; border-radius: 14px; background: #fff4d9; }
+    .modal h2 { color: #35291e; }
+    .modal p { color: #75634e; }
+    .score-row { border-color: rgba(125,78,42,.2); color: #443627; }
+    .score-row strong { color: #a94c2b; }
+    .footer-note { color: #c4dfe4; }
+    @media (max-width: 720px) {
+      .table { min-height: 315px; border-radius: 34px; }
+      .opponent { min-height: 76px; }
+      .opponent .avatar { width: 39px; height: 39px; font-size: 25px; }
+    }
+    @media (max-width: 430px) {
+      .table { min-height: 285px; border-radius: 26px; }
+      .opponent { flex-direction: column; justify-content: center; text-align: center; }
+      .opponent-info { width: 100%; }
+      .opponent .avatar { width: 35px; height: 35px; font-size: 22px; }
+      .opponent-turn { display: none; }
+    }
+    .animal-picker { display: flex; flex-wrap: wrap; gap: 9px; }
+    .animal-choice {
+      display: grid; justify-items: center; gap: 4px;
+      width: 58px; min-height: 58px; padding: 6px 4px;
+      border: 2px solid #c39b68; border-radius: 10px;
+      background: #fffdf6; color: #574432; cursor: pointer;
+      font-size: 9px; font-weight: 700;
+    }
+    .animal-choice span { font-size: 25px; line-height: 1; }
+    .animal-choice:hover, .animal-choice.selected {
+      border-color: #a94c2b; background: #ffe8bd;
+      box-shadow: 0 3px 0 rgba(91,54,27,.16);
+    }
+    :root {
+      color-scheme: dark;
+      --bg: #0b0c0d;
+      --surface: #131516;
+      --surface-raised: #191c1d;
+      --line: #343638;
+      --muted: #999b9a;
+      --text: #f1f0eb;
+      --gold: #bd9a58;
+      --gold-bright: #e6c77f;
+      --green: #7aab89;
+      --red: #cb7869;
+      --mono: "DM Mono", "Courier New", monospace;
+      --sans: "Manrope", Arial, sans-serif;
+    }
+    body {
+      background:
+        radial-gradient(ellipse at 50% -35%, rgba(189,154,88,.11), transparent 55%),
+        linear-gradient(180deg, #101213, #0b0c0d 65%);
+      color: var(--text);
+    }
+    .shell { width: min(1080px, 100%); padding-right: 28px; padding-left: 28px; }
+    .topbar { height: 70px; border-color: rgba(255,255,255,.09); }
+    .brand-mark { border: 1px solid rgba(189,154,88,.55); border-radius: 3px; background: transparent; color: var(--gold-bright); }
+    .brand-name { color: var(--text); letter-spacing: .16em; }
+    .brand-sub, .connection { color: var(--muted); }
+    main { padding-top: 40px; }
+    .eyebrow { color: var(--gold-bright); }
+    h1 { color: var(--text); text-shadow: none; }
+    .intro { color: var(--muted); }
+    .lobby-grid { gap: 16px; margin-top: 28px; }
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: linear-gradient(145deg, rgba(25,28,29,.98), rgba(17,19,20,.98));
+      box-shadow: 0 12px 32px rgba(0,0,0,.16);
+      color: var(--text);
+    }
+    .panel-head { border-color: rgba(255,255,255,.08); }
+    .panel-title, .player-name { color: var(--text); }
+    .panel-note, .rule-text { color: #a5a6a2; }
+    .field-label { color: #d0cec6; }
+    input, select {
+      min-height: 48px;
+      border: 1px solid #454747;
+      border-radius: 4px;
+      background: #101213;
+      color: var(--text);
+    }
+    input:focus, select:focus { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(189,154,88,.13); }
+    .button {
+      min-height: 46px;
+      border: 1px solid #484a49;
+      border-radius: 4px;
+      background: linear-gradient(180deg, #202324, #181a1b);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+      box-shadow: none;
+      transition: transform .16s ease, border-color .16s ease, background .16s ease, box-shadow .16s ease;
+    }
+    .button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      border-color: var(--gold);
+      background: #252523;
+      box-shadow: 0 5px 16px rgba(0,0,0,.22);
+    }
+    .button.primary {
+      border-color: #d4b36d;
+      background: linear-gradient(135deg, #e1c27c, #b9944f);
+      color: #171512;
+      box-shadow: 0 3px 12px rgba(189,154,88,.16);
+    }
+    .button.primary:hover:not(:disabled) { border-color: #f1d996; background: linear-gradient(135deg, #efd693, #c6a55f); }
+    .button:disabled { opacity: .4; box-shadow: none; }
+    .divider, .rule, .setting-line, .player-row { border-color: rgba(255,255,255,.075); }
+    .rule-num { color: var(--gold); }
+    .notice { color: var(--red); }
+    .room-head { margin-top: 26px; }
+    .room-head .eyebrow, .room-link-note { color: var(--muted); }
+    .room-code { color: var(--gold-bright); text-shadow: none; }
+    .avatar {
+      width: 38px; height: 38px;
+      border: 1px solid #686052;
+      border-radius: 4px;
+      background: linear-gradient(145deg, #252625, #171819);
+      color: var(--gold-bright);
+      font: 21px var(--sans);
+    }
+    .player-tag, .opponent-count { color: var(--muted); }
+    .player-state { color: var(--green); }
+    .setting-line { color: var(--muted); }
+    .setting-line strong { color: var(--text); }
+    .game-view { width: 100%; max-width: 1000px; margin: 0 auto; }
+    .game-top {
+      max-width: 920px;
+      align-items: center;
+      margin: 28px auto 18px;
+      padding: 18px 21px;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--gold);
+      border-radius: 4px;
+      background: linear-gradient(100deg, rgba(189,154,88,.09), rgba(19,21,22,.92) 48%);
+      transition: border-color .2s ease, box-shadow .2s ease;
+    }
+    .game-top.is-my-turn {
+      border-left-color: var(--gold-bright);
+      box-shadow: 0 0 28px rgba(189,154,88,.08);
+    }
+    .game-top h2 {
+      margin-top: 6px;
+      color: #d8d7d1;
+      font-size: clamp(22px, 3vw, 30px);
+      letter-spacing: -.04em;
+      text-shadow: none;
+    }
+    .game-top.is-my-turn h2 { color: var(--gold-bright); }
+    .game-meta { gap: 15px; color: var(--muted); }
+    .game-meta strong { color: var(--gold-bright); font-size: 13px; }
+    .table {
+      width: 100%;
+      max-width: 920px;
+      min-height: 230px;
+      margin: 0 auto;
+      padding: 20px 24px;
+      grid-template-columns: minmax(0,1fr) 110px minmax(0,1fr);
+      gap: 14px;
+      overflow: visible;
+      border: 1px solid #66583c;
+      border-radius: 7px;
+      background:
+        radial-gradient(ellipse at center, rgba(189,154,88,.095), transparent 66%),
+        linear-gradient(145deg, #1b1d1d, #121415);
+      box-shadow: inset 0 0 0 5px rgba(189,154,88,.035), 0 12px 35px rgba(0,0,0,.23);
+    }
+    .table::before {
+      inset: 8px;
+      z-index: 0;
+      border: 1px solid rgba(189,154,88,.1);
+      border-radius: 3px;
+    }
+    .table::after { display: none; }
+    .opponents { z-index: 1; gap: 8px; }
+    .opponent {
+      min-height: 66px;
+      padding: 9px 11px;
+      border: 1px solid #3c3e3e;
+      border-radius: 4px;
+      background: linear-gradient(135deg, rgba(35,37,37,.96), rgba(23,25,26,.96));
+      box-shadow: none;
+      transition: border-color .16s ease, transform .16s ease, background .16s ease;
+    }
+    .opponent:hover:not(:disabled) {
+      transform: translateY(-2px);
+      border-color: #786943;
+      background: #242522;
+    }
+    .opponent.selected {
+      border-color: var(--gold-bright);
+      background: linear-gradient(135deg, rgba(189,154,88,.16), rgba(25,27,27,.98));
+      box-shadow: 0 0 0 1px rgba(189,154,88,.18);
+    }
+    .opponent:disabled { opacity: .68; }
+    .opponent-name { color: var(--text); font-size: 11px; }
+    .opponent-count { font-size: 9px; }
+    .opponent-turn { color: var(--gold-bright); font-size: 8px; }
+    .opponent .avatar { width: 40px; height: 40px; border-color: #554d3c; background: #191b1b; font-size: 23px; }
+    .deck { z-index: 1; }
+    .deck-card {
+      width: 66px; height: 91px;
+      border: 1px solid #a68b51;
+      border-radius: 4px;
+      background:
+        repeating-linear-gradient(45deg, transparent 0 7px, rgba(189,154,88,.09) 7px 8px),
+        linear-gradient(145deg, #262724, #161819);
+      color: var(--gold-bright);
+      box-shadow: 3px 4px 0 #0b0c0d, 5px 6px 0 #333128;
+    }
+    .deck-card::after { border: 1px solid rgba(230,199,127,.36); }
+    .deck-card span { font-size: 22px; }
+    .deck-count { color: var(--text); }
+    .deck-label { color: var(--muted); }
+    .table-status { color: #bbb8ae; font-size: 11px; }
+    .hand-section { max-width: 920px; margin: 25px auto 0; }
+    .section-head { margin-bottom: 15px; }
+    .section-title { color: var(--text); font-size: 15px; }
+    .section-hint { color: var(--muted); }
+    .hand { gap: 12px; align-items: flex-start; min-height: 155px; padding: 4px 3px 10px; }
+    .card {
+      width: 86px; height: 126px;
+      padding: 10px;
+      border: 1px solid #9b824b;
+      border-radius: 5px;
+      background:
+        linear-gradient(145deg, rgba(189,154,88,.1), transparent 42%),
+        linear-gradient(160deg, #242624, #151718);
+      color: #f2eee3;
+      box-shadow: inset 0 0 0 3px rgba(189,154,88,.055), 0 7px 18px rgba(0,0,0,.27);
+      transition: transform .17s ease, border-color .17s ease, box-shadow .17s ease;
+    }
+    .card:hover:not(:disabled) {
+      transform: translateY(-7px);
+      border-color: var(--gold-bright);
+      box-shadow: inset 0 0 0 3px rgba(189,154,88,.1), 0 12px 24px rgba(0,0,0,.4);
+    }
+    .card.selected {
+      outline: 2px solid var(--gold-bright);
+      outline-offset: 2px;
+      transform: translateY(-7px);
+      box-shadow: inset 0 0 0 3px rgba(189,154,88,.12), 0 12px 28px rgba(189,154,88,.14);
+    }
+    .card:disabled { opacity: .54; cursor: not-allowed; }
+    .card.red-suit { color: #d78370; }
+    .card-rank { font-size: 20px; font-weight: 700; }
+    .card-suit { font-size: 31px; }
+    .card-corner-bottom { color: var(--gold); font-size: 13px; }
+    .step-label {
+      display: flex; align-items: center; gap: 9px; margin: 0 0 12px;
+      color: #d8d6cf; font-size: 12px; font-weight: 700;
+    }
+    .step-number {
+      display: grid; place-items: center; width: 23px; height: 23px;
+      border: 1px solid #77643f; border-radius: 50%;
+      color: var(--gold-bright); font: 10px var(--mono);
+    }
+    .opponent-step { max-width: 920px; margin: 13px auto 0; }
+    .opponent-step .table-status { margin-top: 10px; text-align: left; }
+    .ask-area {
+      gap: 14px;
+      margin-top: 18px;
+      padding: 16px;
+      border: 1px solid #343637;
+      border-radius: 5px;
+      background: linear-gradient(120deg, #191b1c, #121415);
+    }
+    .ask-copy { flex: 1; min-width: 190px; color: #c5c4bd; font-size: 12px; line-height: 1.6; }
+    .ask-copy strong { color: var(--gold-bright); }
+    #askButton { min-width: 220px; min-height: 52px; font-size: 13px; }
+    #askButton:not(:disabled) { animation: ready-glow 2s ease-in-out infinite alternate; }
+    @keyframes ready-glow {
+      from { box-shadow: 0 3px 10px rgba(189,154,88,.14); }
+      to { box-shadow: 0 4px 20px rgba(189,154,88,.3); }
+    }
+    .action-notice {
+      display: flex; align-items: center; gap: 11px;
+      max-width: 920px; min-height: 44px; margin: 14px auto 0; padding: 10px 14px;
+      border: 1px solid rgba(189,154,88,.3); border-radius: 4px;
+      background: rgba(189,154,88,.055);
+      color: #d5d1c6; font-size: 11px; line-height: 1.5;
+      animation: notice-in .28s ease-out both;
+    }
+    .action-notice::before { content: "↳"; color: var(--gold-bright); font: 16px var(--mono); }
+    @keyframes notice-in {
+      from { opacity: .55; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .feed { max-width: 920px; margin: 17px auto 0; }
+    .feed .panel-head { border-color: rgba(255,255,255,.08); }
+    .feed-list { color: var(--text); }
+    .feed-item { border-color: rgba(255,255,255,.1); border-radius: 3px; color: #b5b4ae; }
+    .feed-item strong, .chest { color: var(--gold-bright); }
+    .chest { border-color: rgba(189,154,88,.35); border-radius: 3px; }
+    .empty-state { color: var(--muted); }
+    .modal-backdrop { background: rgba(0,0,0,.78); backdrop-filter: blur(5px); }
+    .modal {
+      border: 1px solid #78663e;
+      border-radius: 5px;
+      background: linear-gradient(145deg, #1d1f1f, #111314);
+      box-shadow: 0 24px 70px rgba(0,0,0,.5);
+    }
+    .modal h2 { color: var(--text); }
+    .modal p { color: var(--muted); }
+    .score-row { border-color: rgba(255,255,255,.09); color: #dedbd2; }
+    .score-row strong { color: var(--gold-bright); }
+    .footer-note { color: #777a78; }
+    .animal-choice {
+      border: 1px solid #454747;
+      border-radius: 4px;
+      background: #141617;
+      color: #d7d4cb;
+    }
+    .animal-choice:hover, .animal-choice.selected {
+      border-color: var(--gold);
+      background: #24231f;
+      box-shadow: inset 0 0 0 1px rgba(189,154,88,.13);
+    }
+    @media (max-width: 720px) {
+      .shell { padding-right: 17px; padding-left: 17px; }
+      main { padding-top: 28px; }
+      .game-top { margin-top: 20px; padding: 15px; }
+      .table { min-height: 215px; padding: 15px 12px; grid-template-columns: minmax(0,1fr) 74px minmax(0,1fr); border-radius: 5px; }
+      .opponent { min-height: 62px; padding: 7px; }
+      .opponent .avatar { width: 33px; height: 33px; font-size: 19px; }
+      .deck-card { width: 53px; height: 74px; }
+      .game-meta { gap: 10px; }
+      .game-meta span { font-size: 9px; }
+      .hand-section, .opponent-step, .action-notice, .feed { max-width: none; }
+    }
+    @media (max-width: 430px) {
+      .topbar { height: 62px; }
+      .shell { padding-right: 13px; padding-left: 13px; }
+      .brand { gap: 9px; }
+      .brand-mark { width: 29px; height: 29px; }
+      .brand-name { font-size: 10px; }
+      .brand-sub { font-size: 8px; }
+      .connection { font-size: 8px; }
+      .lobby-grid { grid-template-columns: 1fr; }
+      .game-top { align-items: flex-start; gap: 8px; padding: 13px 11px; }
+      .game-top h2 { font-size: 21px; }
+      .game-meta { gap: 5px; font-size: 8px; }
+      .table { grid-template-columns: minmax(0,1fr) 56px minmax(0,1fr); gap: 5px; min-height: 190px; padding: 12px 7px; }
+      .opponent { flex-direction: row; min-height: 54px; gap: 5px; padding: 5px; text-align: left; }
+      .opponent .avatar { width: 27px; height: 27px; font-size: 16px; }
+      .opponent-name { font-size: 9px; }
+      .opponent-count { font-size: 8px; }
+      .deck-card { width: 43px; height: 62px; }
+      .deck-card span { font-size: 17px; }
+      .table-status { font-size: 9px; }
+      .hand { gap: 8px; min-height: 126px; }
+      .card { width: 68px; height: 101px; padding: 8px; }
+      .card-rank { font-size: 17px; }
+      .card-suit { font-size: 25px; }
+      .ask-area { align-items: stretch; padding: 12px; }
+      .ask-copy { min-width: 100%; }
+      #askButton { width: 100%; min-width: 100%; }
+      .lobby-columns { grid-template-columns: 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
+    :root {
+      color-scheme: light;
+      --bg: #fff8e8;
+      --surface: #ffffff;
+      --surface-raised: #f3f0ff;
+      --line: #27243b;
+      --muted: #66647a;
+      --text: #29263d;
+      --gold: #7357d8;
+      --gold-bright: #5738c5;
+      --green: #268b62;
+      --red: #dd4e55;
+    }
+    body {
+      background:
+        radial-gradient(circle at 8% 11%, rgba(255, 126, 151, .18) 0 7px, transparent 8px),
+        radial-gradient(circle at 92% 18%, rgba(115, 87, 216, .14) 0 9px, transparent 10px),
+        radial-gradient(ellipse at 50% -25%, #fff 0, transparent 68%),
+        var(--bg);
+      color: var(--text);
+    }
+    .topbar { border-color: rgba(39,36,59,.14); }
+    .brand-mark {
+      border: 2px solid #ff6e86;
+      border-radius: 10px;
+      background: #fff;
+      color: #ee496a;
+    }
+    .brand-name { color: #29263d; }
+    .brand-sub, .connection { color: #77748b; }
+    .eyebrow { color: #7357d8; text-shadow: none; }
+    h1 { color: #29263d; text-shadow: 2px 2px 0 #e7ddff; }
+    .intro { color: #66647a; }
+    .panel {
+      border: 2px solid #29263d;
+      border-radius: 17px;
+      background: #fff;
+      box-shadow: 0 6px 0 rgba(41,38,61,.14);
+      color: #29263d;
+    }
+    .panel-head { border-color: rgba(39,36,59,.12); }
+    .panel-title, .player-name { color: #29263d; }
+    .panel-note, .rule-text { color: #68657a; }
+    .field-label { color: #48445f; }
+    input, select {
+      border: 2px solid #d9d4ea;
+      border-radius: 11px;
+      background: #fff;
+      color: #29263d;
+    }
+    input:focus, select:focus {
+      border-color: #7357d8;
+      box-shadow: 0 0 0 3px rgba(115,87,216,.14);
+    }
+    .button {
+      border: 2px solid #c9c3dd;
+      border-radius: 12px;
+      background: #fff;
+      color: #36324d;
+      box-shadow: 0 3px 0 rgba(41,38,61,.12);
+    }
+    .button:hover:not(:disabled) {
+      border-color: #7357d8;
+      background: #f5f1ff;
+    }
+    .button.primary {
+      border-color: #5738c5;
+      background: #7357d8;
+      color: #fff;
+      box-shadow: 0 4px 0 #4930a4;
+    }
+    .button.primary:hover:not(:disabled) {
+      border-color: #4930a4;
+      background: #6245ce;
+    }
+    .button:disabled { opacity: .45; }
+    .divider, .rule, .setting-line, .player-row { border-color: rgba(39,36,59,.12); }
+    .rule-num { color: #7357d8; }
+    .notice { color: #c63f4c; }
+    .room-code { color: #5738c5; text-shadow: none; }
+    .room-link-note, .room-head .eyebrow { color: #68657a; }
+    .avatar {
+      border: 2px solid #ff8ca0;
+      background: #fff0f3;
+      color: #29263d;
+    }
+    .player-tag, .opponent-count { color: #77748b; }
+    .player-state { color: #268b62; }
+    .setting-line { color: #68657a; }
+    .setting-line strong { color: #29263d; }
+    .game-top {
+      border-color: #dcd6ed;
+      border-left: 5px solid #ff7189;
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: 0 5px 0 rgba(41,38,61,.1);
+    }
+    .game-top.is-my-turn {
+      border-left-color: #7357d8;
+      box-shadow: 0 5px 0 rgba(41,38,61,.1), 0 0 0 4px rgba(115,87,216,.1);
+    }
+    .game-top h2, .game-top.is-my-turn h2 { color: #29263d; text-shadow: none; }
+    .game-meta { color: #77748b; }
+    .game-meta strong { color: #5738c5; }
+    .table {
+      border: 3px solid #29263d;
+      border-radius: 28px;
+      background:
+        radial-gradient(ellipse at center, #fff 0 20%, transparent 21%),
+        linear-gradient(145deg, #dbf6ff, #c8ecff);
+      box-shadow: inset 0 0 0 6px rgba(255,255,255,.7), 0 7px 0 rgba(41,38,61,.14);
+    }
+    .table::before {
+      border: 2px dashed rgba(41,38,61,.16);
+      border-radius: 20px;
+    }
+    .table::after { display: none; }
+    .opponent {
+      border: 2px solid #d9d4ea;
+      border-radius: 15px;
+      background: #fff;
+      box-shadow: 0 3px 0 rgba(41,38,61,.1);
+    }
+    .opponent:hover:not(:disabled), .opponent.selected {
+      border-color: #7357d8;
+      background: #f3f0ff;
+    }
+    .opponent.selected { box-shadow: 0 0 0 3px rgba(115,87,216,.16); }
+    .opponent-name { color: #29263d; }
+    .opponent-turn { color: #dd4e55; }
+    .opponent .avatar { border-color: #ffc2cc; background: #fff0f3; }
+    .deck-count { color: #29263d; }
+    .deck-label { color: #66647a; }
+    .deck-card {
+      border: 2px solid #5738c5;
+      border-radius: 10px;
+      background: repeating-linear-gradient(45deg, #8d77e4 0 7px, #a18fec 7px 14px);
+      color: #fff;
+      box-shadow: 3px 4px 0 rgba(41,38,61,.2);
+    }
+    .deck-card::after { border: 2px solid rgba(255,255,255,.65); border-radius: 6px; }
+    .table-status { color: #514d68; text-shadow: none; }
+    .section-title, .step-label { color: #29263d; }
+    .section-hint { color: #68657a; }
+    .step-number {
+      border: 2px solid #a797e8;
+      color: #5738c5;
+    }
+    .card {
+      border: 2px solid #d4cee4;
+      border-radius: 12px;
+      background: #fff;
+      color: #29263d;
+      box-shadow: 0 5px 0 rgba(41,38,61,.12);
+    }
+    .card:hover:not(:disabled) {
+      border-color: #7357d8;
+      box-shadow: 0 8px 0 rgba(41,38,61,.12);
+    }
+    .card.selected {
+      outline-color: #ff7189;
+      box-shadow: 0 8px 0 rgba(41,38,61,.12);
+    }
+    .card.red-suit { color: #e84d68; }
+    .card-corner-bottom { color: #7357d8; }
+    .ask-area {
+      border: 2px solid #d9d4ea;
+      border-radius: 16px;
+      background: #fff;
+    }
+    .ask-copy { color: #66647a; }
+    .ask-copy strong { color: #5738c5; }
+    #askButton:not(:disabled) { animation: none; }
+    .action-notice {
+      border: 2px solid #ffc2cc;
+      border-radius: 14px;
+      background: #fff0f3;
+      color: #49445f;
+    }
+    .action-notice::before { color: #e84d68; }
+    .feed-list { color: #29263d; }
+    .feed-item {
+      border-color: #e1dced;
+      border-radius: 10px;
+      color: #5e5a73;
+    }
+    .feed-item strong, .chest { color: #5738c5; }
+    .chest {
+      border-color: #bdb0f2;
+      border-radius: 10px;
+      background: #f3f0ff;
+    }
+    .empty-state { color: #77748b; }
+    .modal-backdrop { background: rgba(41,38,61,.52); }
+    .modal {
+      border: 3px solid #29263d;
+      border-radius: 22px;
+      background: #fff;
+    }
+    .modal h2 { color: #29263d; }
+    .modal p { color: #68657a; }
+    .score-row { border-color: #e1dced; color: #49445f; }
+    .score-row strong { color: #5738c5; }
+    .footer-note { color: #77748b; }
+    .animal-choice {
+      border: 2px solid #d9d4ea;
+      border-radius: 13px;
+      background: #fff;
+      color: #49445f;
+    }
+    .animal-choice:hover, .animal-choice.selected {
+      border-color: #7357d8;
+      background: #f3f0ff;
+      box-shadow: 0 3px 0 rgba(41,38,61,.1);
+    }
+    .question-backdrop {
+      position: fixed;
+      z-index: 20;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(41,38,61,.58);
+      backdrop-filter: blur(5px);
+    }
+    .question-card {
+      width: min(540px, 100%);
+      padding: clamp(24px, 6vw, 42px);
+      border: 4px solid #29263d;
+      border-radius: 28px;
+      background: #fff;
+      box-shadow: 0 10px 0 #ff91a4, 0 22px 70px rgba(22,18,45,.3);
+      text-align: center;
+      animation: question-pop .22s cubic-bezier(.2,.8,.2,1.2) both;
+    }
+    .question-sticker { font-size: 44px; line-height: 1; }
+    .question-kicker {
+      margin: 15px 0 8px;
+      color: #7357d8;
+      font: 700 12px var(--mono);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    .question-card h2 {
+      margin: 0;
+      color: #29263d;
+      font-size: clamp(24px, 6vw, 36px);
+      line-height: 1.16;
+      letter-spacing: -.04em;
+    }
+    .question-rank-word { color: #5738c5; white-space: nowrap; }
+    .question-rank {
+      display: inline-grid;
+      place-items: center;
+      min-width: 104px;
+      min-height: 104px;
+      margin: 18px 0 12px;
+      border: 3px solid #5738c5;
+      border-radius: 24px;
+      background: #f3f0ff;
+      color: #5738c5;
+      font-size: clamp(48px, 12vw, 66px);
+      font-weight: 800;
+      line-height: 1;
+      transform: rotate(-4deg);
+    }
+    .question-rule {
+      margin: 0 auto;
+      max-width: 390px;
+      color: #68657a;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .question-rule strong { color: #e84d68; }
+    .question-actions { display: grid; gap: 10px; margin-top: 24px; }
+    .question-actions .button { min-height: 54px; font-size: 15px; }
+    @keyframes question-pop {
+      from { opacity: 0; transform: translateY(12px) scale(.94); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @media (max-width: 720px) {
+      .table { border-radius: 24px; }
+      .question-backdrop { padding: 14px; }
+      .question-card { border-radius: 22px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .question-card { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"><span>♢</span></div>
+        <div><div class="brand-name">Сундучок</div><div class="brand-sub">карточный стол · 01</div></div>
+      </div>
+      <div id="connection" class="connection"><span class="connection-dot"></span><span id="connectionText">не в комнате</span></div>
+    </header>
+    <main>
+      <section id="homeView" class="view active">
+        <div class="eyebrow">Карточная игра · 2–6 игроков</div>
+        <h1>Соберите свой<br>сундучок.</h1>
+        <p class="intro">Спрашивайте карты, собирайте четыре одного достоинства и забирайте партию. Создайте стол и пригласите друзей по ссылке.</p>
+        <div class="lobby-grid">
+          <section class="panel">
+            <div class="panel-head"><h2 class="panel-title">Новый стол</h2><p class="panel-note">Вы станете ведущим и сможете начать игру.</p></div>
+            <div class="panel-body">
+              <label class="field"><span class="field-label">Ваше имя</span><input id="hostName" maxlength="18" autocomplete="nickname" placeholder="Например, Алексей"></label>
+              <div class="field"><span class="field-label">Выберите животное</span><div id="animalPicker" class="animal-picker" role="group" aria-label="Выберите животное"></div></div>
+              <div class="setting-row">
+                <label class="field"><span class="field-label">Колода</span><select id="deckSize"><option value="36">36 карт</option><option value="52">52 карты</option></select></label>
+                <label class="field"><span class="field-label">Кого спрашивать</span><select id="askRule"><option value="any">Любого игрока</option><option value="left">Только слева</option></select></label>
+              </div>
+              <button id="createRoom" class="button primary full">Создать комнату <span aria-hidden="true">↗</span></button>
+              <div id="homeNotice" class="notice" role="status"></div>
+              <div class="divider"></div>
+              <label class="field"><span class="field-label">Войти по коду комнаты</span>
+                <div class="join-row"><input id="joinCode" maxlength="40" autocomplete="off" placeholder="Например, sunduk-a1b2c3d4"><button id="joinRoom" class="button">Войти</button></div>
+              </label>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2 class="panel-title">Правила стола</h2><p class="panel-note">Коротко о том, как играть.</p></div>
+            <div class="rules">
+              <div class="rule"><span class="rule-num">01</span><span class="rule-text">Каждому — четыре карты. Остальные лежат в закрытой колоде.</span></div>
+              <div class="rule"><span class="rule-num">02</span><span class="rule-text">Спросите соперника о достоинстве, которое есть у вас на руке.</span></div>
+              <div class="rule"><span class="rule-num">03</span><span class="rule-text">Угадали — заберите ВСЕ карты этого достоинства, не одну; соперник добирает столько же. Ход остаётся за вами.</span></div>
+              <div class="rule"><span class="rule-num">04</span><span class="rule-text">Не угадали — возьмите карту из колоды, ход переходит дальше.</span></div>
+              <div class="rule"><span class="rule-num">05</span><span class="rule-text">Четыре карты одного достоинства — ваш сундучок. Побеждает игрок с большим числом сундучков.</span></div>
+            </div>
+          </section>
+        </div>
+        <div class="footer-note">ЧАСТНЫЕ КОМНАТЫ · ПРЯМОЕ СОЕДИНЕНИЕ МЕЖДУ БРАУЗЕРАМИ</div>
+      </section>
 
-  function resetSession() {
-    players.forEach((player) => { player.stack = 500; });
-    handNumber = 0;
-    wins = 0;
-    lastDealer = -1;
-  }
+      <section id="lobbyView" class="view">
+        <div class="room-head">
+          <div><div class="eyebrow">Комната ожидания</div><h1 style="font-size:32px">Стол собран.</h1>
+            <div class="room-code-wrap"><span id="lobbyCode" class="room-code"></span><button id="copyInvite" class="button small">Скопировать приглашение</button></div>
+            <div class="room-link-note">Отправьте код или ссылку друзьям</div>
+          </div>
+          <button id="leaveLobby" class="button small">Покинуть комнату</button>
+        </div>
+        <div class="lobby-columns">
+          <section class="panel"><div class="panel-head"><h2 class="panel-title">Игроки <span id="lobbyPlayerCount"></span></h2><p class="panel-note">Нужно минимум два игрока. За столом помещается до шести.</p></div><div id="lobbyPlayers" class="player-list"></div></section>
+          <section class="panel"><div class="room-settings">
+            <div class="setting-line"><span>Колода</span><strong id="lobbyDeck"></strong></div>
+            <div class="setting-line"><span>Правило хода</span><strong id="lobbyRule"></strong></div>
+            <button id="startGame" class="button primary full">Начать игру</button>
+            <div id="lobbyNotice" class="notice" role="status"></div>
+          </div></section>
+        </div>
+      </section>
 
-  elements['call-button'].addEventListener('click', () => {
-    if (handOver) startHand();
-    else takeAction('call');
-  });
-  elements['fold-button'].addEventListener('click', () => takeAction('fold'));
-  elements['raise-button'].addEventListener('click', () => takeAction('raise'));
-  elements['raise-down'].addEventListener('click', () => { raiseAmount = Math.max(20, raiseAmount - 20); render(); });
-  elements['raise-up'].addEventListener('click', () => { raiseAmount = Math.min(200, raiseAmount + 20); render(); });
-  elements['new-game'].addEventListener('click', () => { resetSession(); startHand(); });
-  document.getElementById('rules-button').addEventListener('click', () => document.getElementById('rules-dialog').showModal());
-  startHand();
-})();
+      <section id="gameView" class="view">
+        <div class="game-top">
+          <div><div class="eyebrow" id="gameRoomLabel">Партия</div><h2 id="turnTitle">Ход игрока</h2></div>
+          <div class="game-meta"><span>КОЛОДА <strong id="deckRemaining">0</strong></span><span>СУНДУКИ <strong id="chestTotal">0</strong></span></div>
+        </div>
+        <div id="actionNotice" class="action-notice" role="status" aria-live="polite"></div>
+        <div class="table">
+          <div id="opponentsLeft" class="opponents"></div>
+          <div class="deck"><div class="deck-card"><span>♢</span></div><div id="deckCount" class="deck-count">0</div><div class="deck-label">в колоде</div></div>
+          <div id="opponentsRight" class="opponents"></div>
+          <div id="tableStatus" class="table-status"></div>
+        </div>
+        <section class="hand-section">
+          <div class="section-head"><h3 class="section-title"><span class="step-number">01</span> Выберите номинал <span id="handCount" class="player-tag"></span></h3><span id="handHint" class="section-hint"></span></div>
+          <div id="hand" class="hand"></div>
+        </section>
+        <section class="opponent-step">
+          <h3 class="step-label"><span class="step-number">02</span> Выберите игрока</h3>
+          <div id="targetHint" class="table-status"></div>
+          <div class="ask-area"><span id="askCopy" class="ask-copy">Сначала выберите карту, затем соперника за столом.</span><button id="askButton" class="button primary" disabled>Есть ли у тебя…?</button></div>
+        </section>
+        <section class="panel feed"><div class="panel-head"><h3 class="panel-title">Сундучки</h3></div><div id="chestList" class="feed-list"></div></section>
+        <section class="panel feed"><div class="panel-head"><h3 class="panel-title">За столом</h3></div><div id="activity" class="feed-list"></div></section>
+      </section>
+      <div id="modalRoot"></div>
+    </main>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script>
+    (() => {
+      "use strict";
+      const $ = (id) => document.getElementById(id);
+      const SUITS = ["♠", "♥", "♦", "♣"];
+      const RANKS_36 = ["6", "7", "8", "9", "10", "В", "Д", "К", "Т"];
+      const RANKS_52 = ["2", "3", "4", "5", ...RANKS_36];
+      const ANIMALS = [
+        { emoji: "🐻", name: "Медведь" },
+        { emoji: "🦊", name: "Лиса" },
+        { emoji: "🐱", name: "Кот" },
+        { emoji: "🐰", name: "Заяц" },
+        { emoji: "🐼", name: "Панда" },
+        { emoji: "🐸", name: "Лягушка" },
+        { emoji: "🦉", name: "Сова" },
+        { emoji: "🦝", name: "Енот" }
+      ];
+      const app = {
+        peer: null, hostConn: null, connections: new Map(), roomId: "",
+        playerId: "", playerName: "", isHost: false, config: null,
+        state: null, hand: [], selectedRank: null, selectedTarget: null,
+        animal: ANIMALS[0].emoji, inviteUrl: "", peerReady: false, disconnecting: false,
+        connectionTimeout: null
+      };
+
+      function setNotice(id, message) { $(id).textContent = message || ""; }
+      function showView(name) {
+        document.querySelectorAll(".view").forEach((el) => el.classList.remove("active"));
+        $(name + "View").classList.add("active");
+      }
+      function setConnection(status, label) {
+        $("connection").className = "connection " + (status || "");
+        $("connectionText").textContent = label;
+      }
+      function cleanName(value) {
+        return String(value || "").trim().replace(/\s+/g, " ").slice(0, 18);
+      }
+      function validAnimal(value) {
+        return ANIMALS.some((animal) => animal.emoji === value) ? value : ANIMALS[0].emoji;
+      }
+      function renderAnimalPicker() {
+        $("animalPicker").innerHTML = ANIMALS.map((animal) =>
+          '<button type="button" class="animal-choice' + (app.animal === animal.emoji ? " selected" : "") +
+          '" data-animal="' + animal.emoji + '" aria-pressed="' + (app.animal === animal.emoji) +
+          '" aria-label="' + animal.name + '"><span aria-hidden="true">' + animal.emoji + '</span>' + animal.name + '</button>'
+        ).join("");
+      }
+      function makeId() {
+        return "p-" + Math.random().toString(36).slice(2, 10);
+      }
+      function makeRoomCode() {
+        const chars = "abcdefghjkmnpqrstuvwxyz23456789";
+        let code = "sunduk-";
+        for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
+        return code;
+      }
+      function deckFor(size) {
+        const ranks = size === 52 ? RANKS_52 : RANKS_36;
+        return ranks.flatMap((rank) => SUITS.map((suit, suitIndex) => ({
+          id: rank + "-" + suitIndex, rank, suit
+        })));
+      }
+      function shuffle(cards) {
+        for (let i = cards.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [cards[i], cards[j]] = [cards[j], cards[i]];
+        }
+        return cards;
+      }
+      function currentPlayer() {
+        return app.state && app.state.players.find((player) => player.id === app.state.players[app.state.turnIndex]?.id);
+      }
+      function roomLink(code) {
+        const url = new URL(window.location.href);
+        url.search = "";
+        url.hash = "";
+        url.searchParams.set("room", code);
+        return url.toString();
+      }
+      function announce(message) {
+        if (!app.state) return;
+        app.state.activity.unshift(message);
+        app.state.activity = app.state.activity.slice(0, 12);
+      }
+      function playerById(id) { return app.state.players.find((player) => player.id === id); }
+      function sortHand(hand) {
+        const rankOrder = (app.config.size === 52 ? RANKS_52 : RANKS_36);
+        return hand.slice().sort((a, b) => rankOrder.indexOf(a.rank) - rankOrder.indexOf(b.rank) || SUITS.indexOf(a.suit) - SUITS.indexOf(b.suit));
+      }
+      function chestCheck(player) {
+        const counts = new Map();
+        player.hand.forEach((card) => counts.set(card.rank, (counts.get(card.rank) || 0) + 1));
+        for (const [rank, count] of counts) {
+          if (count === 4) {
+            player.hand = player.hand.filter((card) => card.rank !== rank);
+            player.chests.push(rank);
+            announce(player.name + " собрал" + (player.name.endsWith("а") ? "а" : "") + " сундучок " + rank);
+          }
+        }
+      }
+      function checkGameEnd() {
+        if (app.state.deck.length !== 0) return false;
+        app.state.finished = true;
+        app.state.turnIndex = -1;
+        return true;
+      }
+      function startState() {
+        const cards = shuffle(deckFor(app.config.size));
+        const players = app.state.players.map((player) => ({ ...player, hand: [], chests: [] }));
+        for (let card = 0; card < 4; card++) {
+          players.forEach((player) => player.hand.push(cards.pop()));
+        }
+        app.state.players = players;
+        app.state.deck = cards;
+        app.state.turnIndex = 0;
+        app.state.started = true;
+        app.state.finished = false;
+        app.state.activity = ["Партия началась. Первый ход — " + players[0].name + "."];
+        players.forEach(chestCheck);
+        broadcastState();
+      }
+      function nextTurn() {
+        const count = app.state.players.length;
+        if (count === 0) return;
+        app.state.turnIndex = (app.state.turnIndex + 1) % count;
+        if (app.state.players[app.state.turnIndex].hand.length === 0 && app.state.deck.length > 0) {
+          app.state.players[app.state.turnIndex].hand.push(app.state.deck.pop());
+          announce(app.state.players[app.state.turnIndex].name + " добрал карту и продолжает игру");
+          chestCheck(app.state.players[app.state.turnIndex]);
+        }
+      }
+      function publicState() {
+        return {
+          players: app.state.players.map((player) => ({
+            id: player.id, name: player.name, animal: player.animal,
+            cardCount: player.hand.length, chests: player.chests.slice()
+          })),
+          turnIndex: app.state.turnIndex,
+          deckCount: app.state.deck.length,
+          started: app.state.started,
+          finished: app.state.finished,
+          activity: app.state.activity.slice(),
+          rule: app.config.rule, size: app.config.size
+        };
+      }
+      function sendToPlayer(playerId, message) {
+        if (playerId === app.playerId) {
+          if (message.type === "state") {
+            app.hand = message.hand || [];
+            render();
+          }
+          return;
+        }
+        const conn = app.connections.get(playerId);
+        if (conn && conn.open) conn.send(message);
+      }
+      function broadcastState() {
+        if (!app.isHost || !app.state) return;
+        const base = publicState();
+        app.state.players.forEach((player) => {
+          sendToPlayer(player.id, {
+            type: "state", state: base,
+            hand: player.hand.map((card) => ({ ...card }))
+          });
+        });
+        render();
+      }
+      function receiveState(message) {
+        app.state = {
+          players: message.state.players,
+          turnIndex: message.state.turnIndex,
+          deck: Array(message.state.deckCount),
+          started: message.state.started,
+          finished: message.state.finished,
+          activity: message.state.activity
+        };
+        app.config = { size: message.state.size, rule: message.state.rule };
+        app.hand = message.hand || [];
+        if (app.state.started) showView("game");
+        else showView("lobby");
+        render();
+      }
+      function sendToHost(message) {
+        if (app.isHost) handleHostAction(app.playerId, message);
+        else if (app.hostConn && app.hostConn.open) app.hostConn.send(message);
+        else setNotice("lobbyNotice", "Нет соединения с ведущим. Попробуйте войти в комнату снова.");
+      }
+      function handleHostAction(playerId, message) {
+        if (!app.isHost || !app.state) return;
+        if (message.type === "join") {
+          const conn = app.connections.get(playerId);
+          if (app.state.started || app.state.players.length >= 6) {
+            if (conn && conn.open) {
+              conn.send({
+                type: "error",
+                message: app.state.started ? "Партия уже началась. Попросите ведущего создать новую комнату." : "В комнате уже шесть игроков."
+              });
+              conn.close();
+            }
+            return;
+          }
+          if (app.state.players.some((player) => player.id === playerId)) return;
+          app.state.players.push({
+            id: playerId, name: cleanName(message.name) || "Игрок",
+            animal: validAnimal(message.animal), hand: [], chests: []
+          });
+          announce(app.state.players[app.state.players.length - 1].name + " присоединился к столу");
+          broadcastState();
+          return;
+        }
+        if (message.type === "leave") {
+          const leaving = playerById(playerId);
+          if (!leaving || playerId === app.playerId || app.state.started) return;
+          app.state.players = app.state.players.filter((player) => player.id !== playerId);
+          app.connections.delete(playerId);
+          announce(leaving.name + " покинул стол");
+          broadcastState();
+          return;
+        }
+        if (message.type !== "ask" || !app.state.started || app.state.finished) return;
+        const asker = playerById(playerId);
+        const target = playerById(message.targetId);
+        if (!asker || !target || app.state.players[app.state.turnIndex]?.id !== playerId) return;
+        if (asker.id === target.id || !asker.hand.some((card) => card.rank === message.rank)) return;
+        if (app.config.rule === "left") {
+          const leftPlayer = app.state.players[(app.state.players.findIndex((player) => player.id === playerId) + 1) % app.state.players.length];
+          if (leftPlayer.id !== target.id) return;
+        }
+        const matches = target.hand.filter((card) => card.rank === message.rank);
+        if (matches.length) {
+          target.hand = target.hand.filter((card) => card.rank !== message.rank);
+          asker.hand.push(...matches);
+          const drawn = Math.min(matches.length, app.state.deck.length);
+          for (let i = 0; i < drawn; i++) target.hand.push(app.state.deck.pop());
+          chestCheck(asker);
+          chestCheck(target);
+          announce(asker.name + " угадал" + (asker.name.endsWith("а") ? "а" : "") + " " + message.rank + " у " + target.name + " · забрал все карты (" + matches.length + ")");
+        } else {
+          if (app.state.deck.length) {
+            asker.hand.push(app.state.deck.pop());
+            announce(asker.name + " не нашёл " + message.rank + " и взял карту");
+          } else {
+            announce(asker.name + " не нашёл " + message.rank);
+          }
+          nextTurn();
+        }
+        checkGameEnd();
+        broadcastState();
+      }
+      function connectToRoom(code, name) {
+        setNotice("homeNotice", "");
+        if (typeof window.Peer !== "function") {
+          setNotice("homeNotice", "Не удалось загрузить PeerJS. Проверьте подключение к интернету и обновите страницу.");
+          return;
+        }
+        const rawCode = String(code || "").trim();
+        let room = rawCode;
+        if (rawCode.includes("://") || rawCode.includes("?room=")) {
+          try {
+            room = new URL(rawCode, window.location.href).searchParams.get("room") || "";
+          } catch (error) {
+            room = "";
+          }
+        }
+        room = room.trim().toLowerCase();
+        if (!/^sunduk-[a-z0-9-]{4,32}$/.test(room)) {
+          setNotice("homeNotice", "Не удалось распознать комнату. Откройте ссылку-приглашение или вставьте код вида sunduk-xxxxxxxx.");
+          return;
+        }
+        app.roomId = room;
+        app.playerName = cleanName(name) || "Игрок";
+        app.playerId = makeId();
+        setConnection("", "подключение");
+        $("joinRoom").disabled = true;
+        $("createRoom").disabled = true;
+        setNotice("homeNotice", "Подключаемся к комнате… Обычно это занимает несколько секунд.");
+        app.connectionTimeout = window.setTimeout(() => {
+          if (app.hostConn && app.hostConn.open) return;
+          cleanup(false);
+          showView("home");
+          setNotice("homeNotice", "Не удалось подключиться за 15 секунд. Проверьте, что ведущий не закрыл вкладку, и попробуйте ещё раз.");
+        }, 15000);
+        app.peer = new Peer(app.playerId, { debug: 0 });
+        app.peer.on("open", () => {
+          app.peerReady = true;
+          app.hostConn = app.peer.connect(room, { reliable: true, serialization: "json" });
+          app.hostConn.on("open", () => {
+            window.clearTimeout(app.connectionTimeout);
+            app.connectionTimeout = null;
+            setConnection("online", "соединено");
+            setNotice("homeNotice", "");
+            app.hostConn.send({ type: "join", name: app.playerName, animal: app.animal });
+            showView("lobby");
+          });
+          app.hostConn.on("data", (message) => {
+            if (message && message.type === "state") receiveState(message);
+            else if (message && message.type === "error") {
+              cleanup(false);
+              showView("home");
+              setNotice("homeNotice", message.message);
+            }
+          });
+          app.hostConn.on("close", () => {
+            setConnection("offline", "связь потеряна");
+            setNotice("lobbyNotice", "Ведущий отключился. Комната больше недоступна.");
+          });
+          app.hostConn.on("error", (error) => {
+            window.clearTimeout(app.connectionTimeout);
+            app.connectionTimeout = null;
+            setConnection("offline", "нет связи");
+            cleanup(false);
+            showView("home");
+            setNotice("homeNotice", error.type === "peer-unavailable"
+              ? "Комната не найдена. Попросите ведущего проверить код и оставить комнату открытой."
+              : "Не удалось установить соединение с комнатой. Проверьте интернет и попробуйте снова.");
+          });
+        });
+        app.peer.on("error", (error) => {
+          window.clearTimeout(app.connectionTimeout);
+          app.connectionTimeout = null;
+          setConnection("offline", "ошибка связи");
+          cleanup(false);
+          showView("home");
+          const message = error.type === "peer-unavailable"
+            ? "Комната не найдена. Проверьте ссылку и попросите ведущего оставить вкладку открытой."
+            : error.type === "network" || error.type === "socket-error"
+              ? "Не удалось связаться с сервером подключения. Проверьте интернет и попробуйте ещё раз."
+              : "Не удалось подключиться (" + error.type + "). Проверьте интернет и попробуйте ещё раз.";
+          setNotice("homeNotice", message);
+        });
+      }
+      function createRoom() {
+        setNotice("homeNotice", "");
+        const name = cleanName($("hostName").value);
+        if (!name) { setNotice("homeNotice", "Введите своё имя."); $("hostName").focus(); return; }
+        if (typeof window.Peer !== "function") { setNotice("homeNotice", "Не удалось загрузить PeerJS. Проверьте подключение к интернету."); return; }
+        app.playerName = name;
+        app.animal = validAnimal(app.animal);
+        app.playerId = makeId();
+        app.isHost = true;
+        app.config = { size: Number($("deckSize").value), rule: $("askRule").value };
+        app.state = {
+          players: [{ id: app.playerId, name, animal: app.animal, hand: [], chests: [] }],
+          deck: [], turnIndex: 0, started: false, finished: false, activity: ["Комната создана."]
+        };
+        app.roomId = makeRoomCode();
+        app.peer = new Peer(app.roomId, { debug: 0 });
+        setConnection("", "создание комнаты");
+        $("createRoom").disabled = true;
+        $("joinRoom").disabled = true;
+        app.peer.on("open", (actualId) => {
+          app.roomId = actualId;
+          app.inviteUrl = roomLink(actualId);
+          app.peerReady = true;
+          app.peer.on("connection", (conn) => {
+            conn.on("open", () => {
+              app.connections.set(conn.peer, conn);
+            });
+            conn.on("data", (message) => handleHostAction(conn.peer, message));
+            conn.on("close", () => {
+              const player = playerById(conn.peer);
+              app.connections.delete(conn.peer);
+              if (player && !app.state.started) {
+                app.state.players = app.state.players.filter((item) => item.id !== conn.peer);
+                announce(player.name + " покинул стол");
+                broadcastState();
+              } else if (player && app.state.started) {
+                announce(player.name + " потерял соединение");
+                broadcastState();
+              }
+            });
+          });
+          $("lobbyCode").textContent = actualId;
+          $("lobbyDeck").textContent = app.config.size + " карты";
+          $("lobbyRule").textContent = app.config.rule === "left" ? "только слева" : "любой игрок";
+          setConnection("online", "комната открыта");
+          showView("lobby");
+          render();
+          if (window.location.protocol === "file:") {
+            setNotice("lobbyNotice", "Для приглашения друзей откройте эту страницу по адресу с HTTPS.");
+          }
+        });
+        app.peer.on("error", (error) => {
+          setConnection("offline", "ошибка связи");
+          setNotice("homeNotice", error.type === "unavailable-id" ? "Не удалось занять код комнаты. Создайте комнату ещё раз." : "Не удалось создать комнату. Проверьте интернет и попробуйте снова.");
+          cleanup(false);
+          showView("home");
+        });
+      }
+      function cleanup(notify) {
+        window.clearTimeout(app.connectionTimeout);
+        app.connectionTimeout = null;
+        if (notify && app.hostConn && app.hostConn.open) app.hostConn.send({ type: "leave" });
+        app.disconnecting = true;
+        if (app.peer) app.peer.destroy();
+        app.peer = null;
+        app.hostConn = null;
+        app.connections.clear();
+        app.roomId = "";
+        app.playerId = "";
+        app.playerName = "";
+        app.isHost = false;
+        app.config = null;
+        app.state = null;
+        app.hand = [];
+        app.selectedRank = null;
+        app.selectedTarget = null;
+        app.peerReady = false;
+        app.disconnecting = false;
+        $("createRoom").disabled = false;
+        $("joinRoom").disabled = false;
+        setConnection("", "не в комнате");
+      }
+      function rankLabel(rank) { return rank; }
+      function initials(name) { return name.trim().slice(0, 1).toUpperCase() || "И"; }
+      function renderLobby() {
+        if (!app.state || app.state.started) return;
+        $("lobbyCode").textContent = app.roomId;
+        $("lobbyPlayerCount").textContent = "(" + app.state.players.length + "/6)";
+        $("lobbyPlayers").innerHTML = app.state.players.map((player, index) =>
+          '<div class="player-row"><div class="avatar" aria-hidden="true">' + validAnimal(player.animal) + '</div><div class="player-name">' + escapeHtml(player.name) + '</div><span class="player-tag">' + (index === 0 ? "ведущий" : "игрок") + '</span><span class="player-state">готов</span></div>'
+        ).join("");
+        $("startGame").disabled = !app.isHost || app.state.players.length < 2;
+        $("startGame").textContent = app.isHost ? (app.state.players.length < 2 ? "Ожидание игроков" : "Начать игру") : "Ожидание ведущего";
+      }
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+      }
+      function renderGame() {
+        if (!app.state || !app.state.started) return;
+        const players = app.state.players;
+        const active = app.state.turnIndex >= 0 ? players[app.state.turnIndex] : null;
+        const myTurn = active && active.id === app.playerId && !app.state.finished;
+        if (app.selectedRank && !app.hand.some((card) => card.rank === app.selectedRank)) app.selectedRank = null;
+        if (app.selectedTarget && !players.some((player) => player.id === app.selectedTarget)) app.selectedTarget = null;
+        $("gameRoomLabel").textContent = "Комната " + app.roomId;
+        $("turnTitle").textContent = app.state.finished ? "Партия завершена" : (myTurn ? "Ваш ход" : "Ход: " + (active ? active.name : "—"));
+        document.querySelector("#gameView .game-top").classList.toggle("is-my-turn", Boolean(myTurn));
+        $("deckRemaining").textContent = String(app.state.deck.length);
+        $("deckCount").textContent = String(app.state.deck.length);
+        $("chestTotal").textContent = String(players.reduce((total, player) => total + player.chests.length, 0));
+        $("handCount").textContent = "(" + app.hand.length + ")";
+        $("tableStatus").textContent = app.state.finished ? "Колода закончилась · партия завершена" : (myTurn ? "Ваш ход — выберите номинал карты и соперника ниже." : "Ожидайте своего хода.");
+        $("handHint").textContent = myTurn ? "Нажмите на карту" : "";
+        $("actionNotice").textContent = app.state.activity[0] || "Партия началась.";
+        const otherPlayers = players.filter((player) => player.id !== app.playerId);
+        const canAsk = myTurn && app.hand.length > 0;
+        const allowed = (player) => app.config.rule !== "left" || players[(players.findIndex((item) => item.id === app.playerId) + 1) % players.length]?.id === player.id;
+        const buttons = otherPlayers.map((player) =>
+          '<button type="button" class="opponent ' + (app.selectedTarget === player.id ? "selected" : "") + '" data-player="' + escapeHtml(player.id) + '" aria-pressed="' + (app.selectedTarget === player.id) + '" aria-label="Выбрать игрока ' + escapeHtml(player.name) + '"' + (!canAsk || !allowed(player) ? " disabled" : "") + '>' +
+          '<div class="avatar" aria-hidden="true">' + validAnimal(player.animal) + '</div><div class="opponent-info"><div class="opponent-name">' + escapeHtml(player.name) + '</div><div class="opponent-count">' + (player.cardCount ?? (player.hand ? player.hand.length : 0)) + ' карт · ' + player.chests.length + ' сундуков</div></div>' +
+          (active && active.id === player.id ? '<span class="opponent-turn">ХОД</span>' : "") + '</button>'
+        );
+        $("opponentsLeft").innerHTML = buttons.filter((_, index) => index % 2 === 0).join("");
+        $("opponentsRight").innerHTML = buttons.filter((_, index) => index % 2 !== 0).join("");
+        document.querySelectorAll(".opponent[data-player]").forEach((button) => {
+          button.addEventListener("click", () => {
+            app.selectedTarget = button.dataset.player;
+            renderGame();
+          });
+        });
+        const suitsSymbols = { "♠": "♠", "♥": "♥", "♦": "♦", "♣": "♣" };
+        $("hand").innerHTML = sortHand(app.hand).map((card) => {
+          const red = card.suit === "♥" || card.suit === "♦";
+          return '<button type="button" class="card ' + (red ? "red-suit " : "") + (app.selectedRank === card.rank ? "selected" : "") + '" data-rank="' + escapeHtml(card.rank) + '" aria-pressed="' + (app.selectedRank === card.rank) + '"' + (!myTurn ? " disabled" : "") + ' aria-label="Выбрать номинал ' + escapeHtml(card.rank + ", " + card.suit) + '">' +
+            '<span class="card-rank">' + escapeHtml(card.rank) + '</span><span class="card-suit">' + suitsSymbols[card.suit] + '</span><span class="card-corner-bottom">' + escapeHtml(card.rank) + '</span></button>';
+        }).join("");
+        document.querySelectorAll(".card[data-rank]").forEach((button) => {
+          button.addEventListener("click", () => {
+            app.selectedRank = button.dataset.rank;
+            renderGame();
+          });
+        });
+        const target = app.selectedTarget ? playerById(app.selectedTarget) : null;
+        const rankHeld = app.hand.some((card) => card.rank === app.selectedRank);
+        $("askButton").disabled = !canAsk || !rankHeld || !target || !allowed(target);
+        $("targetHint").textContent = !myTurn
+          ? "Соперники отображаются на игровом столе выше."
+          : (app.config.rule === "left" ? "По правилу комнаты выбирайте только игрока слева." : "Нажмите на карточку соперника за столом выше.");
+        if (app.selectedRank && target) {
+          $("askCopy").innerHTML = 'Ваш вопрос: «Есть ли у <strong>' + escapeHtml(target.name) + '</strong> <strong>' + escapeHtml(rankLabel(app.selectedRank)) + '</strong>?»';
+          $("askButton").textContent = "Есть ли у тебя " + rankLabel(app.selectedRank) + "?";
+        } else if (app.selectedRank) {
+          $("askCopy").innerHTML = "Номинал выбран: <strong>" + escapeHtml(rankLabel(app.selectedRank)) + "</strong>. Теперь нажмите на игрока за столом.";
+          $("askButton").textContent = "Выберите игрока";
+        } else if (target) {
+          $("askCopy").innerHTML = "Игрок выбран: <strong>" + escapeHtml(target.name) + "</strong>. Теперь выберите номинал на своей карте.";
+          $("askButton").textContent = "Выберите номинал";
+        } else {
+          $("askCopy").textContent = myTurn ? "Выберите номинал на карте и игрока за столом." : "Когда придёт ваш ход, сначала выберите карту, затем игрока.";
+          $("askButton").textContent = "Есть ли у тебя…?";
+        }
+        $("askButton").onclick = () => {
+          if (!$("askButton").disabled) {
+            const question = { type: "ask", targetId: app.selectedTarget, rank: app.selectedRank };
+            app.selectedRank = null;
+            app.selectedTarget = null;
+            sendToHost(question);
+            renderGame();
+          }
+        };
+        $("chestList").innerHTML = players.map((player) => player.chests.map((rank) =>
+          '<span class="chest">' + escapeHtml(player.name) + ' · ' + escapeHtml(rank) + '</span>'
+        ).join("")).join("") || '<span class="empty-state">Пока ни одного сундучка.</span>';
+        $("activity").innerHTML = app.state.activity.map((item) => '<span class="feed-item">' + escapeHtml(item) + '</span>').join("");
+        if (app.state.finished) renderResults();
+        else if (myTurn && app.selectedRank && target && allowed(target)) renderQuestion(target);
+        else $("modalRoot").innerHTML = "";
+      }
+      function renderQuestion(target) {
+        $("modalRoot").innerHTML = '<div class="question-backdrop"><section class="question-card" role="dialog" aria-modal="true" aria-labelledby="questionTitle">' +
+          '<div class="question-sticker" aria-hidden="true">👀</div><p class="question-kicker">Внимание, вопрос!</p>' +
+          '<h2 id="questionTitle">Есть ли у игрока «' + escapeHtml(target.name) + '» карта <span class="question-rank-word">' + escapeHtml(rankLabel(app.selectedRank)) + '</span>?</h2>' +
+          '<div class="question-rank" aria-label="' + escapeHtml(rankLabel(app.selectedRank)) + '">' + escapeHtml(rankLabel(app.selectedRank)) + '</div>' +
+          '<p class="question-rule">Если есть — получишь <strong>все карты</strong> этого номинала. Не одну!</p>' +
+          '<div class="question-actions"><button id="questionAsk" class="button primary">Спросить!</button>' +
+          '<button id="questionCancel" class="button">Выбрать заново</button></div></section></div>';
+        $("questionAsk").addEventListener("click", () => $("askButton").click());
+        $("questionCancel").addEventListener("click", () => {
+          app.selectedRank = null;
+          app.selectedTarget = null;
+          renderGame();
+        });
+        $("questionAsk").focus();
+      }
+      function renderResults() {
+        const sorted = app.state.players.slice().sort((a, b) => b.chests.length - a.chests.length);
+        const best = sorted[0] ? sorted[0].chests.length : 0;
+        const winners = sorted.filter((player) => player.chests.length === best);
+        $("modalRoot").innerHTML = '<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="resultTitle"><div class="eyebrow">Итоги партии</div><h2 id="resultTitle">' +
+          (winners.length === 1 ? "Победитель — " + escapeHtml(winners[0].name) : "Ничья") +
+          '</h2><p>Счёт по собранным сундучкам.</p>' + sorted.map((player) =>
+            '<div class="score-row"><span>' + escapeHtml(player.name) + '</span><strong>' + player.chests.length + '</strong></div>'
+          ).join("") + '<div style="margin-top:20px"><button id="closeResults" class="button primary full">К итогам стола</button></div></section></div>';
+        $("closeResults").addEventListener("click", () => { $("modalRoot").innerHTML = ""; });
+      }
+      function render() {
+        if (!app.state) return;
+        if (app.state.started) {
+          showView("game");
+          renderGame();
+        } else {
+          showView("lobby");
+          renderLobby();
+        }
+      }
+
+      $("createRoom").addEventListener("click", createRoom);
+      $("animalPicker").addEventListener("click", (event) => {
+        const choice = event.target.closest("[data-animal]");
+        if (!choice) return;
+        app.animal = validAnimal(choice.dataset.animal);
+        renderAnimalPicker();
+      });
+      $("joinRoom").addEventListener("click", () => {
+        setNotice("homeNotice", "");
+        const name = cleanName($("hostName").value) || "Игрок";
+        connectToRoom($("joinCode").value, name);
+      });
+      $("joinCode").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") $("joinRoom").click();
+      });
+      $("hostName").addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && $("joinCode").value.trim()) {
+          event.preventDefault();
+          $("joinRoom").click();
+        }
+      });
+      $("startGame").addEventListener("click", () => {
+        if (app.isHost && app.state && app.state.players.length >= 2) startState();
+      });
+      $("copyInvite").addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(app.inviteUrl || roomLink(app.roomId));
+          $("copyInvite").textContent = "Ссылка скопирована";
+          setTimeout(() => { $("copyInvite").textContent = "Скопировать приглашение"; }, 1800);
+        } catch (error) {
+          setNotice("lobbyNotice", "Не удалось скопировать. Код комнаты: " + app.roomId);
+        }
+      });
+      $("leaveLobby").addEventListener("click", () => {
+        cleanup(true);
+        showView("home");
+      });
+      const params = new URLSearchParams(window.location.search);
+      const invitedRoom = params.get("room");
+      if (invitedRoom) {
+        $("joinCode").value = invitedRoom;
+        $("hostName").focus();
+      }
+      renderAnimalPicker();
+      window.addEventListener("beforeunload", () => {
+        if (app.hostConn && app.hostConn.open) app.hostConn.send({ type: "leave" });
+      });
+    })();
+  </script>
+</body>
+</html>
