@@ -857,7 +857,8 @@
         peer: null, hostConn: null, connections: new Map(), roomId: "",
         playerId: "", playerName: "", isHost: false, config: null,
         state: null, hand: [], selectedRank: null, selectedTarget: null,
-        animal: ANIMALS[0].emoji, inviteUrl: "", peerReady: false, disconnecting: false
+        animal: ANIMALS[0].emoji, inviteUrl: "", peerReady: false, disconnecting: false,
+        connectionTimeout: null
       };
 
       function setNotice(id, message) { $(id).textContent = message || ""; }
@@ -1025,7 +1026,18 @@
       function handleHostAction(playerId, message) {
         if (!app.isHost || !app.state) return;
         if (message.type === "join") {
-          if (app.state.started || app.state.players.length >= 6 || app.state.players.some((player) => player.id === playerId)) return;
+          const conn = app.connections.get(playerId);
+          if (app.state.started || app.state.players.length >= 6) {
+            if (conn && conn.open) {
+              conn.send({
+                type: "error",
+                message: app.state.started ? "Партия уже началась. Попросите ведущего создать новую комнату." : "В комнате уже шесть игроков."
+              });
+              conn.close();
+            }
+            return;
+          }
+          if (app.state.players.some((player) => player.id === playerId)) return;
           app.state.players.push({
             id: playerId, name: cleanName(message.name) || "Игрок",
             animal: validAnimal(message.animal), hand: [], chests: []
@@ -1074,13 +1086,23 @@
         broadcastState();
       }
       function connectToRoom(code, name) {
+        setNotice("homeNotice", "");
         if (typeof window.Peer !== "function") {
           setNotice("homeNotice", "Не удалось загрузить PeerJS. Проверьте подключение к интернету и обновите страницу.");
           return;
         }
-        const room = String(code || "").trim().toLowerCase();
+        const rawCode = String(code || "").trim();
+        let room = rawCode;
+        if (rawCode.includes("://") || rawCode.includes("?room=")) {
+          try {
+            room = new URL(rawCode, window.location.href).searchParams.get("room") || "";
+          } catch (error) {
+            room = "";
+          }
+        }
+        room = room.trim().toLowerCase();
         if (!/^sunduk-[a-z0-9-]{4,32}$/.test(room)) {
-          setNotice("homeNotice", "Проверьте код комнаты. Он должен начинаться с sunduk-.");
+          setNotice("homeNotice", "Не удалось распознать комнату. Откройте ссылку-приглашение или вставьте код вида sunduk-xxxxxxxx.");
           return;
         }
         app.roomId = room;
@@ -1089,35 +1111,60 @@
         setConnection("", "подключение");
         $("joinRoom").disabled = true;
         $("createRoom").disabled = true;
+        setNotice("homeNotice", "Подключаемся к комнате… Обычно это занимает несколько секунд.");
+        app.connectionTimeout = window.setTimeout(() => {
+          if (app.hostConn && app.hostConn.open) return;
+          cleanup(false);
+          showView("home");
+          setNotice("homeNotice", "Не удалось подключиться за 15 секунд. Проверьте, что ведущий не закрыл вкладку, и попробуйте ещё раз.");
+        }, 15000);
         app.peer = new Peer(app.playerId, { debug: 0 });
         app.peer.on("open", () => {
           app.peerReady = true;
           app.hostConn = app.peer.connect(room, { reliable: true, serialization: "json" });
           app.hostConn.on("open", () => {
+            window.clearTimeout(app.connectionTimeout);
+            app.connectionTimeout = null;
             setConnection("online", "соединено");
+            setNotice("homeNotice", "");
             app.hostConn.send({ type: "join", name: app.playerName, animal: app.animal });
             showView("lobby");
           });
           app.hostConn.on("data", (message) => {
             if (message && message.type === "state") receiveState(message);
-            else if (message && message.type === "error") setNotice("lobbyNotice", message.message);
+            else if (message && message.type === "error") {
+              cleanup(false);
+              showView("home");
+              setNotice("homeNotice", message.message);
+            }
           });
           app.hostConn.on("close", () => {
             setConnection("offline", "связь потеряна");
             setNotice("lobbyNotice", "Ведущий отключился. Комната больше недоступна.");
           });
-          app.hostConn.on("error", () => {
+          app.hostConn.on("error", (error) => {
+            window.clearTimeout(app.connectionTimeout);
+            app.connectionTimeout = null;
             setConnection("offline", "нет связи");
-            setNotice("homeNotice", "Не удалось войти. Проверьте код и убедитесь, что ведущий онлайн.");
             cleanup(false);
             showView("home");
+            setNotice("homeNotice", error.type === "peer-unavailable"
+              ? "Комната не найдена. Попросите ведущего проверить код и оставить комнату открытой."
+              : "Не удалось установить соединение с комнатой. Проверьте интернет и попробуйте снова.");
           });
         });
         app.peer.on("error", (error) => {
+          window.clearTimeout(app.connectionTimeout);
+          app.connectionTimeout = null;
           setConnection("offline", "ошибка связи");
-          setNotice("homeNotice", "Не удалось подключиться: " + (error.type === "peer-unavailable" ? "комната не найдена." : "проверьте подключение и попробуйте снова."));
           cleanup(false);
           showView("home");
+          const message = error.type === "peer-unavailable"
+            ? "Комната не найдена. Проверьте ссылку и попросите ведущего оставить вкладку открытой."
+            : error.type === "network" || error.type === "socket-error"
+              ? "Не удалось связаться с сервером подключения. Проверьте интернет и попробуйте ещё раз."
+              : "Не удалось подключиться (" + error.type + "). Проверьте интернет и попробуйте ещё раз.";
+          setNotice("homeNotice", message);
         });
       }
       function createRoom() {
@@ -1179,6 +1226,8 @@
         });
       }
       function cleanup(notify) {
+        window.clearTimeout(app.connectionTimeout);
+        app.connectionTimeout = null;
         if (notify && app.hostConn && app.hostConn.open) app.hostConn.send({ type: "leave" });
         app.disconnecting = true;
         if (app.peer) app.peer.destroy();
@@ -1331,6 +1380,12 @@
       });
       $("joinCode").addEventListener("keydown", (event) => {
         if (event.key === "Enter") $("joinRoom").click();
+      });
+      $("hostName").addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && $("joinCode").value.trim()) {
+          event.preventDefault();
+          $("joinRoom").click();
+        }
       });
       $("startGame").addEventListener("click", () => {
         if (app.isHost && app.state && app.state.players.length >= 2) startState();
